@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+ssl/
+
+# Реальные учётные данные, шаблон лежит рядом в credentials.txt.example
+config/credentials.txt

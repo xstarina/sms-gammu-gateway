@@ -1,0 +1,17 @@
+# Служебное окружение сборки
+.git
+.gitignore
+.github
+Dockerfile
+.dockerignore
+LICENSE
+README.md
+
+# Локальное окружение Python — не должно перекрывать окружение из builder-стадии
+.venv
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Секреты не запекаем в образ, credentials.txt монтируется при запуске (см. README)
+config/credentials.txt
