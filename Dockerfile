@@ -3,12 +3,15 @@
 # ------------------------------------------------------------------------------
 FROM alpine:3.24 AS base
 
+# tzdata нужен, чтобы работала переменная TZ: без базы часовых поясов
+# musl оставит контейнер в UTC, и логи будут идти не по местному времени.
 RUN set -ex; \
     apk add --no-cache \
         python3 \
         libcurl \
         bluez-libs \
         libusb \
+        tzdata \
     ;
 
 WORKDIR /sms-gw

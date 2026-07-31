@@ -141,6 +141,7 @@ services:
       - ./config:/sms-gw/config:ro
     environment:
       PIN: "1234"
+      TZ: Europe/Moscow
     restart: unless-stopped
 ```
 
@@ -188,6 +189,7 @@ connection = at
 | `SSL` | выключен | Включает HTTPS. Истинными считаются `1`, `true`, `yes`, `on` (регистр не важен), любое другое значение выключает |
 | `GAMMU_CONFIG` | `config/gammu.config` | Путь к конфигу Gammu |
 | `CREDENTIALS_FILE` | `config/credentials.txt` | Путь к файлу с учётными данными |
+| `TZ` | `UTC` | Часовой пояс контейнера, например `Europe/Moscow`. Определяет время в логах |
 
 ### HTTPS
 
