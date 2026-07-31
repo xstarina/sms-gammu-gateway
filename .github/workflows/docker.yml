@@ -8,21 +8,21 @@ on:
   workflow_dispatch:
 
 env:
-  # Публикуем в GitHub Container Registry: он авторизуется встроенным
-  # GITHUB_TOKEN, заводить секреты не нужно.
+  # Published to the GitHub Container Registry: it authenticates with the built-in
+  # GITHUB_TOKEN, so no secrets have to be configured.
   REGISTRY_IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
-  # Тесты гоняются в том же образе, что уходит в реестр, и блокируют публикацию.
+  # Tests run in the same image that ships to the registry and gate publishing.
   test:
-    name: Тесты
+    name: Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
       - uses: docker/setup-buildx-action@v4
 
-      - name: Сборка тестовой стадии
+      - name: Build the test stage
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -32,13 +32,13 @@ jobs:
           cache-from: type=gha,scope=test
           cache-to: type=gha,mode=max,scope=test
 
-      - name: Прогон тестов
+      - name: Run tests
         run: docker run --rm sms-gammu-gateway:test
 
-  # Каждая архитектура собирается на своём нативном раннере: Gammu и python-gammu
-  # компилируются из исходников, под эмуляцией это заняло бы десятки минут.
+  # Each architecture builds on its own native runner: Gammu and python-gammu are
+  # compiled from source, which would take tens of minutes under emulation.
   build:
-    name: Сборка ${{ matrix.platform }}
+    name: Build ${{ matrix.platform }}
     needs: test
     if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.runner }}
@@ -54,14 +54,14 @@ jobs:
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
     steps:
-      - name: Имя платформы для артефакта
+      - name: Platform name for the artifact
         run: echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
         env:
           platform: ${{ matrix.platform }}
 
       - uses: actions/checkout@v7
 
-      - name: Метки образа
+      - name: Image labels
         id: meta
         uses: docker/metadata-action@v6
         with:
@@ -75,20 +75,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Сборка и публикация по digest
+      - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Теги на этом шаге не ставятся: каждая архитектура публикуется
-          # отдельным digest, а собирает их в один образ задача merge.
+          # No tags at this step: every architecture is published as its own digest
+          # and the merge job assembles them into a single image.
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
 
-      - name: Сохранение digest
+      - name: Export the digest
         run: |
           mkdir -p "${{ runner.temp }}/digests"
           digest="${{ steps.build.outputs.digest }}"
@@ -101,9 +101,9 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # Manifest list: один тег, под которым Docker сам выберет нужную архитектуру.
+  # Manifest list: one tag from which Docker picks the matching architecture.
   merge:
-    name: Сборка манифеста
+    name: Merge manifest
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -118,7 +118,7 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
-      - name: Теги образа
+      - name: Image tags
         id: meta
         uses: docker/metadata-action@v6
         with:
@@ -135,12 +135,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Публикация манифеста
+      - name: Push the manifest
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
 
-      - name: Проверка опубликованного образа
+      - name: Inspect the published image
         run: docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}

@@ -1,4 +1,4 @@
-"""Работа с GSM-модемом через Gammu."""
+"""GSM modem access through Gammu."""
 
 from __future__ import annotations
 
@@ -13,17 +13,17 @@ from sms_gateway.errors import GatewayError
 
 logger = logging.getLogger(__name__)
 
-# Папка 0 в терминах Gammu — входящие сообщения на SIM и в памяти телефона
+# Folder 0 in Gammu terms is the inbox on the SIM and in phone memory
 INBOX_FOLDER = 0
 
 
 class Modem:
-    """Потокобезопасная обёртка над gammu.StateMachine.
+    """Thread-safe wrapper around gammu.StateMachine.
 
-    Gammu держит одно соединение с устройством и не рассчитан на параллельные
-    обращения, а Flask обслуживает запросы в нескольких потоках. Поэтому каждая
-    операция выполняется под общей блокировкой, а составные операции
-    (прочитать и удалить) захватывают её один раз целиком.
+    Gammu keeps a single connection to the device and is not meant for
+    concurrent access, while Flask serves requests in several threads. Every
+    operation therefore runs under a shared lock, and compound operations
+    (read then delete) hold that lock for the whole sequence.
     """
 
     def __init__(self, pin: str | None = None, config_file: str = DEFAULT_GAMMU_CONFIG) -> None:
@@ -37,9 +37,9 @@ class Modem:
         if self._machine.GetSecurityStatus() != 'PIN':
             return
         if not pin:
-            raise GatewayError('SIM-карта запрашивает PIN, задайте переменную окружения PIN')
+            raise GatewayError('SIM card asks for a PIN, set the PIN environment variable')
         self._machine.EnterSecurityCode('PIN', pin)
-        logger.info('PIN принят')
+        logger.info('PIN accepted')
 
     def signal_quality(self) -> dict[str, Any]:
         with self._lock:
@@ -53,7 +53,7 @@ class Modem:
         return info
 
     def reset(self) -> None:
-        """Программный сброс модема без выключения питания."""
+        """Soft-reset the modem without cutting power."""
         with self._lock:
             self._machine.Reset(False)
 
@@ -62,13 +62,13 @@ class Modem:
             return self._read_all()
 
     def get_sms(self, index: int) -> dict[str, Any] | None:
-        """Сообщение по порядковому номеру в текущем списке или None."""
+        """Return the message at the given position, or None if there is none."""
         with self._lock:
             messages = self._read_all()
             return messages[index] if 0 <= index < len(messages) else None
 
     def pop_sms(self) -> dict[str, Any] | None:
-        """Возвращает первое сообщение и сразу удаляет его из памяти модема."""
+        """Return the first message and delete it from modem memory."""
         with self._lock:
             messages = self._read_all()
             if not messages:
@@ -79,7 +79,7 @@ class Modem:
             return first
 
     def delete_sms(self, index: int) -> bool:
-        """Удаляет сообщение по номеру. False, если такого номера нет."""
+        """Delete the message at the given position. False if there is none."""
         with self._lock:
             messages = self._read_all()
             if not 0 <= index < len(messages):
@@ -95,17 +95,17 @@ class Modem:
         smsc: str | None = None,
         unicode: bool = False,
     ) -> list[int]:
-        """Отправляет текст на каждый номер, возвращает ссылки отправленных частей.
+        """Send the text to every number, returning the references of sent parts.
 
-        Длинный текст Gammu сам разбивает на несколько частей, каждая уходит
-        отдельным сообщением.
+        Gammu splits long text into several parts on its own, and each part is
+        sent as a separate message.
         """
         message_info = {
             'Class': -1,
             'Unicode': unicode,
             'Entries': [{'ID': 'ConcatenatedTextLong', 'Buffer': text}],
         }
-        # Без явного номера SMS-центра берётся тот, что записан на SIM
+        # Without an explicit SMS centre number the one stored on the SIM is used
         smsc_info = {'Number': smsc} if smsc else {'Location': 1}
         parts = gammu.EncodeSMS(message_info)
 
@@ -119,12 +119,12 @@ class Modem:
         return references
 
     def _read_all(self) -> list[dict[str, Any]]:
-        """Читает входящие целиком. Вызывать только при захваченной блокировке."""
+        """Read the whole inbox. Call only while holding the lock."""
         raw_parts = []
         current = None
 
-        # Модем отдаёт сообщения по одной части за вызов и сигнализирует
-        # о конце списка исключением ERR_EMPTY
+        # The modem returns one part per call and signals the end of the list
+        # by raising ERR_EMPTY
         while True:
             try:
                 if current is None:
@@ -138,17 +138,17 @@ class Modem:
 
             raw_parts.append(current)
 
-        # LinkSMS собирает части многочастных сообщений в одно
+        # LinkSMS joins the parts of multipart messages back together
         return [self._decode(parts) for parts in gammu.LinkSMS(raw_parts)]
 
     def _delete(self, locations: Iterable[int]) -> None:
-        """Удаляет все части сообщения. Вызывать только при захваченной блокировке."""
+        """Delete every part of a message. Call only while holding the lock."""
         for location in locations:
             self._machine.DeleteSMS(Folder=INBOX_FOLDER, Location=location)
 
     @staticmethod
     def _decode(parts: list[dict[str, Any]]) -> dict[str, Any]:
-        """Собирает из частей сообщения плоский словарь с текстом."""
+        """Flatten the parts of a message into a single dict with its text."""
         head = parts[0]
         decoded = gammu.DecodeSMS(parts)
 
@@ -164,6 +164,6 @@ class Modem:
             'Number': head['Number'],
             'State': head['State'],
             'Text': text,
-            # Адреса частей в памяти модема, нужны только для удаления
+            # Addresses of the parts in modem memory, needed only for deletion
             'Locations': [part['Location'] for part in parts],
         }

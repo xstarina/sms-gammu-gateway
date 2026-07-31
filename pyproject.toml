@@ -1,8 +1,8 @@
-# Проект разворачивается контейнером, а не устанавливается как пакет,
-# поэтому здесь только настройки инструментов разработки.
+# The project is deployed as a container rather than installed as a package,
+# so this file only carries development tool settings.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Корень проекта в sys.path, чтобы тесты находили пакет sms_gateway
+# Project root on sys.path so tests can import the sms_gateway package
 pythonpath = ["."]
 addopts = "-q"

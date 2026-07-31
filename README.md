@@ -2,37 +2,39 @@
 
 [![Docker](https://github.com/xstarina/sms-gammu-gateway/actions/workflows/docker.yml/badge.svg)](https://github.com/xstarina/sms-gammu-gateway/actions/workflows/docker.yml)
 
-Простой REST API-шлюз для отправки и приёма SMS через GSM-модем, подключённый к хосту.
-Работа с модемом идёт через [Gammu](https://wammu.eu/gammu/) и его Python-биндинги, так что
-поддерживается любое устройство, понимающее стандартные AT-команды — в первую очередь
-USB-модемы (Huawei E1750 и подобные).
+**English** · [Русский](README.ru.md)
 
-Приложение — небольшой Flask-сервис, запускается как `python -m sms_gateway`.
+A simple REST API gateway for sending and receiving SMS through a GSM modem attached to the
+host. The modem is driven by [Gammu](https://wammu.eu/gammu/) and its Python bindings, so any
+device that speaks standard AT commands works — USB modems such as the Huawei E1750 in the
+first place.
 
-## Структура проекта
+The application is a small Flask service, started with `python -m sms_gateway`.
+
+## Project layout
 
 ```
-sms_gateway/          код приложения
-├── api.py            HTTP-ресурсы и фабрика приложения Flask
-├── modem.py          работа с модемом через Gammu
-├── config.py         настройки из окружения и учётные данные
-├── errors.py         исключения уровня приложения
-└── __main__.py       точка входа: сборка и запуск сервера
-config/               конфигурация, монтируется в контейнер
-├── gammu.config      подключение к модему
-└── credentials.txt   логины и пароли, создаётся из .example
-tests/                тесты на поддельном модеме
-.github/workflows/    сборка и публикация образа
-Dockerfile            сборка Gammu, окружения и рантайм-образа
+sms_gateway/          application code
+├── api.py            HTTP resources and the Flask application factory
+├── modem.py          modem access through Gammu
+├── config.py         environment settings and credentials
+├── errors.py         application-level exceptions
+└── __main__.py       entry point: wiring and server start
+config/               configuration, mounted into the container
+├── gammu.config      modem connection
+└── credentials.txt   usernames and passwords, created from the .example file
+tests/                tests against a fake modem
+.github/workflows/    image build and publishing
+Dockerfile            Gammu, environment and runtime image build
 ```
 
-## Требования
+## Requirements
 
 - Docker
-- GSM-модем, видимый на хосте как символьное устройство (`/dev/ttyUSB0` и т.п.)
-- SIM-карта; если на ней включён запрос PIN — сам PIN
+- A GSM modem exposed on the host as a character device (`/dev/ttyUSB0` or similar)
+- A SIM card, plus its PIN if the card asks for one
 
-Проверить, что модем определился:
+Check that the modem was detected:
 
 ```bash
 lsusb
@@ -40,22 +42,22 @@ lsusb
 ls -l /dev/ttyUSB*
 ```
 
-Если устройство определяется только как CD-ROM, понадобится
-[usb-modeswitch](http://www.draisberghof.de/usb_modeswitch), чтобы переключить его в режим модема.
+If the device only shows up as a CD-ROM, you need
+[usb-modeswitch](http://www.draisberghof.de/usb_modeswitch) to switch it into modem mode.
 
-## Быстрый старт
+## Quick start
 
-Собирать образ не нужно — готовый публикуется в GitHub Container Registry под
-`linux/amd64` и `linux/arm64`.
+There is no need to build the image — a ready one is published to the GitHub Container
+Registry for `linux/amd64` and `linux/arm64`.
 
 ```bash
-# 1. Подготовить конфигурацию
+# 1. Prepare the configuration
 mkdir -p config && cd config
 curl -O https://raw.githubusercontent.com/xstarina/sms-gammu-gateway/main/config/gammu.config
-echo 'admin:ваш-пароль' > credentials.txt
+echo 'admin:your-password' > credentials.txt
 cd ..
 
-# 2. Запустить
+# 2. Run it
 docker run -d --name sms-gw \
   -p 5000:5000 \
   --device=/dev/ttyUSB0:/dev/mobile \
@@ -65,38 +67,38 @@ docker run -d --name sms-gw \
   ghcr.io/xstarina/sms-gammu-gateway:latest
 ```
 
-Проверка:
+Check that it works:
 
 ```bash
-curl -u admin:ваш-пароль http://localhost:5000/signal
+curl -u admin:your-password http://localhost:5000/signal
 ```
 
-Каталог `config` монтируется целиком: так правки в `gammu.config` и `credentials.txt`
-подхватываются перезапуском контейнера, без пересборки образа.
+The whole `config` directory is mounted, so edits to `gammu.config` and `credentials.txt`
+take effect on a container restart, without rebuilding the image.
 
-### Теги образа
+### Image tags
 
-| Тег | Что внутри |
+| Tag | Contents |
 |---|---|
-| `latest`, `main` | Текущее состояние ветки `main` |
-| `1.2.3` | Конкретный релиз, из git-тега `v1.2.3` |
-| `1.2` | Последний патч в минорной версии |
+| `latest`, `main` | Current state of the `main` branch |
+| `1.2.3` | A specific release, built from the `v1.2.3` git tag |
+| `1.2` | Latest patch within a minor version |
 
-Каждый образ проходит тесты до публикации: если они падают, в реестр ничего не уходит.
-Для продакшна лучше указывать конкретную версию, а не `latest` — так обновление
-происходит по вашему решению, а не при очередном перезапуске.
+Every image passes the test suite before publishing: if tests fail, nothing reaches the
+registry. For production pin a specific version rather than `latest`, so upgrades happen when
+you decide, not on the next restart.
 
-### Обновление
+### Upgrading
 
 ```bash
 docker pull ghcr.io/xstarina/sms-gammu-gateway:latest
 docker rm -f sms-gw
-# и повторить docker run из быстрого старта
+# then repeat the docker run command from the quick start
 ```
 
-### Сборка из исходников
+### Building from source
 
-Нужна, если хотите поменять код или зафиксировать свою версию Gammu:
+Needed if you want to change the code or pin your own Gammu version:
 
 ```bash
 git clone https://github.com/xstarina/sms-gammu-gateway.git
@@ -113,17 +115,17 @@ docker run -d --name sms-gw \
   sms-gammu-gateway
 ```
 
-### Про `--group-add` и права на устройство
+### About `--group-add` and device permissions
 
-Контейнер работает от непривилегированного пользователя `gammu`, поэтому доступ к
-проброшенному устройству определяется его группой. Пользователь по умолчанию входит в
-группу `dialout` (GID 20) — этого достаточно для большинства хостов (Debian, Ubuntu, Alpine).
+The container runs as the unprivileged user `gammu`, so access to the forwarded device is
+decided by its group. That user belongs to `dialout` (GID 20) out of the box, which covers
+most hosts (Debian, Ubuntu, Alpine).
 
-Если на вашем хосте `/dev/ttyUSB0` принадлежит другой группе (например, `uucp` GID 14 в Arch),
-добавьте её GID через `--group-add`, как в примере выше. Без этого приложение упадёт на старте
-с `gammu.ERR_DEVICENOTEXIST` или ошибкой доступа.
+If `/dev/ttyUSB0` belongs to a different group on your host (`uucp`, GID 14, on Arch for
+example), pass that GID with `--group-add` as shown above. Without it the application fails at
+startup with `gammu.ERR_DEVICENOTEXIST` or a permission error.
 
-Посмотреть текущего владельца устройства: `ls -l /dev/ttyUSB0`.
+To see the current owner of the device: `ls -l /dev/ttyUSB0`.
 
 ### docker compose
 
@@ -136,7 +138,7 @@ services:
     devices:
       - /dev/ttyUSB0:/dev/mobile
     group_add:
-      - "20"          # GID группы, которой принадлежит /dev/ttyUSB0 на хосте
+      - "20"          # GID of the group owning /dev/ttyUSB0 on the host
     volumes:
       - ./config:/sms-gw/config:ro
     environment:
@@ -145,29 +147,29 @@ services:
     restart: unless-stopped
 ```
 
-Обновление: `docker compose pull && docker compose up -d`.
+Upgrading: `docker compose pull && docker compose up -d`.
 
-Чтобы собирать образ из своей копии исходников, замените `image` на `build: .` — остальные
-параметры не меняются.
+To build the image from your own copy of the sources, replace `image` with `build: .` — the
+rest of the settings stay the same.
 
-## Конфигурация
+## Configuration
 
 ### config/credentials.txt
 
-Логины и пароли для HTTP Basic Auth, по одной паре на строку в формате `логин:пароль`.
-Шаблон лежит рядом в [config/credentials.txt.example](config/credentials.txt.example):
+Usernames and passwords for HTTP Basic auth, one `username:password` pair per line. A template
+sits next to it in [config/credentials.txt.example](config/credentials.txt.example):
 
 ```
 admin:password
 ```
 
-**Файл не хранится в репозитории и не попадает в образ** — иначе пароль запёкся бы в слой.
-Его нужно создать и смонтировать при запуске, иначе контейнер упадёт на старте с
-`No such file or directory: 'config/credentials.txt'`.
+**The file is neither stored in the repository nor baked into the image** — otherwise the
+password would end up in an image layer. Create it and mount it at runtime, or the container
+will fail at startup with `No such file or directory: 'config/credentials.txt'`.
 
 ### config/gammu.config
 
-Конфиг подключения к модему в [формате Gammu](https://wammu.eu/docs/manual/config/index.html):
+Modem connection settings in the [Gammu format](https://wammu.eu/docs/manual/config/index.html):
 
 ```ini
 [gammu]
@@ -176,25 +178,25 @@ name = Phone on USB serial port
 connection = at
 ```
 
-Внутри контейнера устройство ожидается по пути `/dev/mobile` — именно поэтому в примерах запуска
-используется `--device=/dev/ttyUSB0:/dev/mobile`. Если удобнее указать реальный путь устройства,
-поправьте `device` в этом файле.
+Inside the container the device is expected at `/dev/mobile`, which is why the run examples use
+`--device=/dev/ttyUSB0:/dev/mobile`. If you would rather point at the real device path, change
+`device` in this file.
 
-### Переменные окружения
+### Environment variables
 
-| Переменная | По умолчанию | Описание |
+| Variable | Default | Description |
 |---|---|---|
-| `PIN` | не задан | PIN SIM-карты. Требуется, только если карта его запрашивает; без него шлюз не стартует |
-| `PORT` | `5000` | Порт HTTP-сервера |
-| `SSL` | выключен | Включает HTTPS. Истинными считаются `1`, `true`, `yes`, `on` (регистр не важен), любое другое значение выключает |
-| `GAMMU_CONFIG` | `config/gammu.config` | Путь к конфигу Gammu |
-| `CREDENTIALS_FILE` | `config/credentials.txt` | Путь к файлу с учётными данными |
-| `TZ` | `UTC` | Часовой пояс контейнера, например `Europe/Moscow`. Определяет время в логах |
+| `PIN` | unset | SIM card PIN. Required only if the card asks for one; without it the gateway will not start |
+| `PORT` | `5000` | HTTP server port |
+| `SSL` | off | Enables HTTPS. `1`, `true`, `yes` and `on` are truthy (case-insensitive), anything else turns it off |
+| `GAMMU_CONFIG` | `config/gammu.config` | Path to the Gammu configuration file |
+| `CREDENTIALS_FILE` | `config/credentials.txt` | Path to the credentials file |
+| `TZ` | `UTC` | Container timezone, for example `Europe/Moscow`. Controls timestamps in the logs |
 
 ### HTTPS
 
-При включённом `SSL` приложение читает ключ и сертификат по фиксированным путям — их нужно
-смонтировать в подготовленный каталог `/ssl`:
+With `SSL` enabled the application reads the key and the certificate from fixed paths, so
+mount them into the prepared `/ssl` directory:
 
 ```bash
 docker run -d -p 5000:5000 \
@@ -205,129 +207,131 @@ docker run -d -p 5000:5000 \
   ghcr.io/xstarina/sms-gammu-gateway:latest
 ```
 
-Ожидаемые файлы: `/ssl/cert.pem` и `/ssl/key.pem`.
+Expected files: `/ssl/cert.pem` and `/ssl/key.pem`.
 
 ## API
 
-Все эндпоинты требуют HTTP Basic-аутентификации по парам из `config/credentials.txt`.
+Every endpoint requires HTTP Basic authentication against the pairs in
+`config/credentials.txt`.
 
-| Метод | Путь | Описание |
+| Method | Path | Description |
 |---|---|---|
-| `GET` | `/sms` | Список всех SMS в памяти модема и на SIM |
-| `POST` | `/sms` | Отправить SMS |
-| `GET` | `/sms/<id>` | SMS по индексу в списке |
-| `DELETE` | `/sms/<id>` | Удалить SMS по индексу |
-| `GET` | `/getsms` | Вернуть первую SMS **и сразу удалить её** из модема |
-| `GET` | `/signal` | Уровень сигнала |
-| `GET` | `/network` | Информация о сети, включая имя оператора |
-| `GET` | `/reset` | Программный сброс модема |
+| `GET` | `/sms` | List every SMS in modem memory and on the SIM |
+| `POST` | `/sms` | Send an SMS |
+| `GET` | `/sms/<id>` | An SMS by its index in the list |
+| `DELETE` | `/sms/<id>` | Delete an SMS by its index |
+| `GET` | `/getsms` | Return the first SMS **and delete it right away** from the modem |
+| `GET` | `/signal` | Signal quality |
+| `GET` | `/network` | Network information, including the operator name |
+| `GET` | `/reset` | Soft reset of the modem |
 
-Идентификатор `<id>` — это порядковый номер в текущем списке сообщений, а не постоянный
-идентификатор: после удаления любой SMS индексы смещаются.
+The `<id>` is a position in the current message list, not a stable identifier: deleting any
+SMS shifts the indices.
 
-### Коды ответов
+### Status codes
 
-| Код | Когда |
+| Code | When |
 |---|---|
-| `400` | Не переданы обязательные параметры при отправке |
-| `401` | Отсутствуют или неверны учётные данные |
-| `404` | Сообщения с таким индексом нет |
-| `502` | Модем не ответил или вернул ошибку |
+| `400` | Required parameters are missing when sending |
+| `401` | Credentials are missing or wrong |
+| `404` | No message with that index |
+| `502` | The modem did not answer or returned an error |
 
-Тело ошибки — JSON вида `{"message": "..."}`.
+The error body is JSON of the form `{"message": "..."}`.
 
-### Отправка SMS
+### Sending an SMS
 
 ```bash
 curl -u admin:password -X POST http://localhost:5000/sms \
   -d "number=+79001234567" \
-  -d "text=Тестовое сообщение"
+  -d "text=Test message"
 ```
 
-Параметры (form-encoded или JSON):
+Parameters (form-encoded or JSON):
 
-| Параметр | Обязательный | Описание |
+| Parameter | Required | Description |
 |---|:---:|---|
-| `number` | да | Номер получателя. Можно перечислить несколько через запятую — сообщение уйдёт каждому |
-| `text` | да | Текст сообщения. Длинные тексты автоматически разбиваются на несколько частей |
-| `unicode` | нет | `True` для не-латинских алфавитов (кириллица). Истинными считаются `1`, `true`, `yes`, `on` |
-| `smsc` | нет | Номер SMS-центра. По умолчанию берётся записанный на SIM (`Location: 1`) |
+| `number` | yes | Recipient number. Several can be listed comma separated, and the message goes to each of them |
+| `text` | yes | Message text. Long texts are automatically split into several parts |
+| `unicode` | no | `True` for non-Latin alphabets such as Cyrillic. `1`, `true`, `yes` and `on` are truthy |
+| `smsc` | no | SMS centre number. Defaults to the one stored on the SIM (`Location: 1`) |
 
-### Приём SMS
+### Receiving SMS
 
 ```bash
-# Прочитать все, ничего не удаляя
+# Read everything without deleting
 curl -u admin:password http://localhost:5000/sms
 
-# Забрать первую и удалить её из модема
+# Take the first one and delete it from the modem
 curl -u admin:password http://localhost:5000/getsms
 ```
 
-Ответ `/getsms` при пустом ящике — объект с пустыми полями `Date`, `Number`, `State`, `Text`.
+For an empty inbox `/getsms` returns an object with empty `Date`, `Number`, `State` and `Text`.
 
-## Сборка
+## Build
 
 ```bash
 docker build -t sms-gammu-gateway .
 ```
 
-Образ собирается в несколько стадий на базе `alpine`: в builder-стадии из исходников
-компилируется Gammu и `python-gammu`, в финальный образ попадают только `libGammu`,
-`libgsmsd`, CLI `gammu` (для диагностики) и готовое окружение Python. Итоговый размер —
-около 130 МБ.
+The image is built in several stages on top of `alpine`: the builder stage compiles Gammu and
+`python-gammu` from source, while the final image receives only `libGammu`, `libgsmsd`, the
+`gammu` CLI (for diagnostics) and the prepared Python environment. The result is about 130 MB.
 
-Контейнер запускается от непривилегированного пользователя, код и окружение принадлежат
-`root` и доступны ему только на чтение. В образ встроена проверка живости: `docker ps`
-покажет состояние `healthy`, как только сервис начнёт принимать соединения.
+The container runs as an unprivileged user; code and environment belong to `root` and are
+read-only for it. A liveness probe is built into the image, so `docker ps` reports `healthy`
+as soon as the service starts accepting connections.
 
-Версия Gammu задаётся build-аргументом:
+The Gammu version is a build argument:
 
 ```bash
 docker build --build-arg GAMMU_VERSION=1.43.3 -t sms-gammu-gateway .
 ```
 
-Версии Python-зависимостей закреплены в [requirements.txt](requirements.txt). Сборка занимает
-несколько минут — Gammu компилируется из исходников, готового пакета для актуального Alpine нет.
+Python dependency versions are pinned in [requirements.txt](requirements.txt). A build takes a
+few minutes because Gammu is compiled from source — there is no prebuilt package for current
+Alpine.
 
-### Диагностика
+### Diagnostics
 
-CLI `gammu` доступен внутри контейнера:
+The `gammu` CLI is available inside the container:
 
 ```bash
 docker exec -it sms-gw gammu --config config/gammu.config --identify
 ```
 
-В рантайм-образе нет `pip` — он вырезан вместе с 13 МБ, которые занимал. Если для отладки
-нужно доставить пакеты, используйте стадию `test`, там окружение полное.
+The runtime image ships without `pip`, which saved the 13 MB it used to occupy. If you need to
+install packages for debugging, use the `test` stage, where the environment is complete.
 
-## Тесты
+## Tests
 
-Тесты работают с поддельным модемом, поэтому устройство для них не нужно. Отдельная стадия
-сборки ставит pytest поверх окружения builder:
+The tests run against a fake modem, so no device is required. A dedicated build stage installs
+pytest on top of the builder environment:
 
 ```bash
 docker build --target test -t sms-gammu-gateway-test .
 docker run --rm sms-gammu-gateway-test
 ```
 
-Покрыты HTTP-слой ([tests/test_api.py](tests/test_api.py)) — аутентификация всех маршрутов,
-коды ответов, разбор параметров — и конфигурация ([tests/test_config.py](tests/test_config.py)):
-переменные окружения и чтение учётных данных. Обмен с устройством внутри `sms_gateway.modem`
-тестами не покрыт: он проверяется только вживую, на подключённом модеме.
+Covered are the HTTP layer ([tests/test_api.py](tests/test_api.py)) — authentication on every
+route, status codes, parameter parsing — and configuration
+([tests/test_config.py](tests/test_config.py)): environment variables and credentials loading.
+The device conversation inside `sms_gateway.modem` is not covered: it can only be verified for
+real, against a connected modem.
 
-## Известные ограничения
+## Known limitations
 
-- **Используется встроенный сервер Flask** (`app.run`), не рассчитанный на продакшн-нагрузку.
-  Для постоянной эксплуатации имеет смысл поставить перед ним nginx или запускать через WSGI-сервер.
-- **Пароли хранятся в открытом виде** в `config/credentials.txt` — это требование формата, а не
-  недосмотр; храните файл с правами `600` и не коммитьте реальные учётные данные.
-- **Запросы к модему выполняются строго по очереди.** Gammu держит одно соединение с
-  устройством, поэтому обращения сериализуются блокировкой: параллельные запросы не ломают
-  друг друга, но ждут завершения предыдущего.
-- **Индексы SMS нестабильны** — см. примечание к `/sms/<id>` выше.
+- **The built-in Flask server is used** (`app.run`), which is not meant for production load.
+  For permanent deployments put nginx in front of it or run it through a WSGI server.
+- **Passwords are stored in plain text** in `config/credentials.txt` — that is what the format
+  requires, not an oversight; keep the file at mode `600` and never commit real credentials.
+- **Modem requests are serialised.** Gammu keeps a single connection to the device, so calls
+  are serialised by a lock: concurrent requests do not corrupt each other, but they do wait for
+  the previous one to finish.
+- **SMS indices are unstable** — see the note on `/sms/<id>` above.
 
-## Лицензия
+## License
 
-Apache License 2.0, см. [LICENSE](LICENSE).
+Apache License 2.0, see [LICENSE](LICENSE).
 
-Проект основан на [pajikos/sms-gammu-gateway](https://github.com/pajikos/sms-gammu-gateway).
+This project is based on [pajikos/sms-gammu-gateway](https://github.com/pajikos/sms-gammu-gateway).

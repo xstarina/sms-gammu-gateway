@@ -1,4 +1,4 @@
-"""Точка входа: сборка приложения и запуск HTTP-сервера."""
+"""Entry point: wire the application together and start the HTTP server."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from sms_gateway.modem import Modem
 
 logger = logging.getLogger(__name__)
 
-# Пути, по которым приложение ждёт ключ и сертификат при включённом SSL
+# Paths where the application expects the key and the certificate when SSL is on
 SSL_CERTIFICATE = ('/ssl/cert.pem', '/ssl/key.pem')
 
 
@@ -29,11 +29,11 @@ def main() -> None:
         users = load_users(settings.credentials_file)
         modem = Modem(pin=settings.pin, config_file=settings.gammu_config)
     except (OSError, GatewayError, gammu.GSMError) as error:
-        logger.error('Не удалось запустить шлюз: %s', error)
+        logger.error('Failed to start the gateway: %s', error)
         raise SystemExit(1) from error
 
     app = create_app(modem, users)
-    # Слушаем все интерфейсы: снаружи контейнера доступен только проброшенный порт
+    # Listen on every interface: only the published port is reachable from outside
     app.run(
         host='0.0.0.0',
         port=settings.port,

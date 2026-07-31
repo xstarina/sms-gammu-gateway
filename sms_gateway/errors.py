@@ -1,5 +1,5 @@
-"""Исключения уровня приложения."""
+"""Application-level exceptions."""
 
 
 class GatewayError(RuntimeError):
-    """Ошибка конфигурации, из-за которой шлюз не может стартовать."""
+    """Configuration error that prevents the gateway from starting."""

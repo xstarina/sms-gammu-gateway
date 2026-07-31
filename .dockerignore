@@ -1,4 +1,4 @@
-# Служебное окружение сборки
+# Build housekeeping
 .git
 .gitignore
 .github
@@ -6,12 +6,13 @@ Dockerfile
 .dockerignore
 LICENSE
 README.md
+README.ru.md
 
-# Локальное окружение Python — не должно перекрывать окружение из builder-стадии
+# Local Python environment must not shadow the one from the builder stage
 .venv
 __pycache__/
 *.pyc
 .pytest_cache/
 
-# Секреты не запекаем в образ, credentials.txt монтируется при запуске (см. README)
+# Secrets stay out of the image, credentials.txt is mounted at runtime (see README)
 config/credentials.txt

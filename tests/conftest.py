@@ -1,4 +1,4 @@
-"""Фикстуры: HTTP-клиент поверх поддельного модема."""
+"""Fixtures: an HTTP client backed by a fake modem."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from sms_gateway.api import create_app
 
 @pytest.fixture
 def make_client():
-    """Фабрика клиентов: позволяет задать содержимое ящика и поведение модема."""
+    """Client factory: lets a test choose the inbox contents and modem behaviour."""
 
     def factory(messages=None, fail=False):
         modem = FakeModem(messages, fail)
@@ -18,7 +18,7 @@ def make_client():
         app.config['TESTING'] = True
 
         client = app.test_client()
-        # Модем нужен тестам, чтобы проверять переданные в него параметры
+        # Tests need the modem to assert on the parameters passed to it
         client.modem = modem
         return client
 
@@ -27,11 +27,11 @@ def make_client():
 
 @pytest.fixture
 def client(make_client):
-    """Клиент с одним сообщением во входящих."""
+    """Client with a single message in the inbox."""
     return make_client([dict(SMS)])
 
 
 @pytest.fixture
 def empty_client(make_client):
-    """Клиент с пустым ящиком."""
+    """Client with an empty inbox."""
     return make_client([])

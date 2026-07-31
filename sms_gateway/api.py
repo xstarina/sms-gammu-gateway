@@ -1,4 +1,4 @@
-"""HTTP-ресурсы шлюза и фабрика приложения Flask."""
+"""HTTP resources of the gateway and the Flask application factory."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from sms_gateway.modem import Modem
 logger = logging.getLogger(__name__)
 auth = HTTPBasicAuth()
 
-# Ответ на запрос к пустому ящику: структура сохраняется, поля пустые
+# Reply for an empty inbox: same structure, empty fields
 EMPTY_SMS = {'Date': '', 'Number': '', 'State': '', 'Text': ''}
 
 
@@ -28,7 +28,7 @@ def verify_password(username: str, password: str) -> str | None:
     if not expected or not password:
         return None
 
-    # Сравнение за постоянное время, чтобы пароль нельзя было подобрать по времени ответа
+    # Constant-time comparison so the password cannot be guessed from response timing
     if not hmac.compare_digest(expected, password):
         return None
 
@@ -41,25 +41,25 @@ def unauthorized() -> tuple[dict[str, str], int]:
 
 
 def handle_gsm_errors(func: Callable) -> Callable:
-    """Отдаёт 502 вместо стектрейса, если модем не ответил или вернул ошибку."""
+    """Return 502 instead of a traceback when the modem fails or does not answer."""
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return func(*args, **kwargs)
         except gammu.GSMError as error:
-            # Traceback для кодов 5xx пишет сам flask-restful, здесь важна причина
-            logger.warning('Ошибка модема: %s', error)
+            # flask-restful logs the traceback for 5xx itself, the cause matters here
+            logger.warning('Modem error: %s', error)
             message = f'Modem error: {error}'
 
-        # abort вне блока except, иначе в лог попадает сцепленный traceback
+        # abort outside the except block, otherwise the log gets a chained traceback
         abort(502, message=message)
 
     return wrapper
 
 
 def request_params() -> Any:
-    """Параметры запроса из JSON, формы или query string — в этом порядке."""
+    """Request parameters from JSON, form data or the query string, in that order."""
     payload = request.get_json(silent=True)
     if isinstance(payload, dict):
         return payload
@@ -67,22 +67,22 @@ def request_params() -> Any:
 
 
 def split_numbers(raw: Any) -> list[str]:
-    """Номера получателей: в одном запросе их можно перечислить через запятую."""
+    """Recipient numbers: several of them can be listed in one request, comma separated."""
     if not raw:
         return []
     return [number.strip() for number in str(raw).split(',') if number.strip()]
 
 
 def public_view(sms: dict[str, Any]) -> dict[str, Any]:
-    """Locations — внутренние адреса частей в памяти модема, наружу не отдаются."""
+    """Locations are internal addresses in modem memory and are never exposed."""
     return {key: value for key, value in sms.items() if key != 'Locations'}
 
 
 class ModemResource(Resource):
-    """Базовый ресурс: аутентификация обязательна, ошибки модема не текут наружу.
+    """Base resource: authentication required, modem errors kept inside.
 
-    Декораторы применяются в обратном порядке, поэтому login_required
-    оказывается внешним и отсекает запрос до обращения к устройству.
+    Decorators apply in reverse order, so login_required ends up outermost and
+    rejects the request before the device is touched.
     """
 
     method_decorators = [handle_gsm_errors, auth.login_required]
@@ -92,7 +92,7 @@ class ModemResource(Resource):
 
 
 class SmsList(ModemResource):
-    """Все входящие сообщения и отправка новых."""
+    """All incoming messages, and sending new ones."""
 
     def get(self) -> list[dict[str, Any]]:
         return [public_view(sms) for sms in self.modem.list_sms()]
@@ -115,7 +115,7 @@ class SmsList(ModemResource):
 
 
 class SmsItem(ModemResource):
-    """Сообщение по порядковому номеру в текущем списке."""
+    """A message addressed by its position in the current list."""
 
     def get(self, sms_id: int) -> dict[str, Any]:
         sms = self.modem.get_sms(sms_id)
@@ -132,7 +132,7 @@ class SmsItem(ModemResource):
 
 
 class SmsInbox(ModemResource):
-    """Забирает первое сообщение и удаляет его из памяти модема."""
+    """Takes the first message and deletes it from modem memory."""
 
     def get(self) -> dict[str, Any]:
         sms = self.modem.pop_sms()
@@ -140,21 +140,21 @@ class SmsInbox(ModemResource):
 
 
 class Signal(ModemResource):
-    """Уровень сигнала."""
+    """Signal quality."""
 
     def get(self) -> dict[str, Any]:
         return self.modem.signal_quality()
 
 
 class Network(ModemResource):
-    """Информация о сети оператора."""
+    """Operator network information."""
 
     def get(self) -> dict[str, Any]:
         return self.modem.network_info()
 
 
 class Reset(ModemResource):
-    """Программный сброс модема."""
+    """Soft reset of the modem."""
 
     def get(self) -> tuple[dict[str, Any], int]:
         self.modem.reset()

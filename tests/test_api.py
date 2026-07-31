@@ -1,4 +1,4 @@
-"""Проверки HTTP-слоя: аутентификация, коды ответов, разбор параметров."""
+"""HTTP layer checks: authentication, status codes, parameter parsing."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import pytest
 
 from helpers import AUTH, basic_auth
 
-# Все маршруты сервиса: ни один из них не должен отвечать без учётных данных
+# Every route of the service: none of them may answer without credentials
 ENDPOINTS = [
     ('get', '/sms'),
     ('post', '/sms'),
@@ -27,9 +27,9 @@ def test_endpoint_requires_auth(client, method, path):
 @pytest.mark.parametrize(
     'credentials',
     [
-        pytest.param(basic_auth(password='wrong'), id='неверный пароль'),
-        pytest.param(basic_auth(username='nobody'), id='неизвестный пользователь'),
-        pytest.param(basic_auth(password=''), id='пустой пароль'),
+        pytest.param(basic_auth(password='wrong'), id='wrong password'),
+        pytest.param(basic_auth(username='nobody'), id='unknown user'),
+        pytest.param(basic_auth(password=''), id='empty password'),
     ],
 )
 def test_bad_credentials_rejected(client, credentials):
@@ -41,7 +41,7 @@ def test_unauthorized_response_is_json(client):
 
     assert response.is_json
     assert 'message' in response.get_json()
-    # Без этого заголовка ответ не является корректным ответом Basic-аутентификации
+    # Without this header the reply is not a valid Basic authentication challenge
     assert 'WWW-Authenticate' in response.headers
 
 
@@ -65,7 +65,7 @@ def test_reset(client):
 
 @pytest.mark.parametrize('path', ['/sms', '/sms/0', '/getsms'])
 def test_locations_are_not_exposed(client, path):
-    """Locations — внутренние адреса частей в памяти модема, наружу не отдаются."""
+    """Locations are internal addresses in modem memory and are never exposed."""
     payload = client.get(path, headers=AUTH).get_json()
     messages = payload if isinstance(payload, list) else [payload]
 
@@ -113,10 +113,10 @@ def test_unicode_flag_parsed_as_bool(empty_client, value, expected):
 @pytest.mark.parametrize(
     'data',
     [
-        pytest.param({'text': 'привет'}, id='без номера'),
-        pytest.param({'number': '+79001111111'}, id='без текста'),
-        pytest.param({'number': '', 'text': 'привет'}, id='пустой номер'),
-        pytest.param({'number': ',,', 'text': 'привет'}, id='только разделители'),
+        pytest.param({'text': 'привет'}, id='no number'),
+        pytest.param({'number': '+79001111111'}, id='no text'),
+        pytest.param({'number': '', 'text': 'привет'}, id='empty number'),
+        pytest.param({'number': ',,', 'text': 'привет'}, id='separators only'),
     ],
 )
 def test_incomplete_request_returns_400(empty_client, data):
@@ -152,7 +152,7 @@ def test_delete_removes_message(client):
 
 @pytest.mark.parametrize('method, path', ENDPOINTS)
 def test_modem_failure_returns_502(make_client, method, path):
-    """Ошибка устройства не должна превращаться в 500 со стектрейсом."""
+    """A device failure must not surface as a 500 with a traceback."""
     client = make_client([], fail=True)
     data = {'number': '+79001111111', 'text': 'привет'}
 

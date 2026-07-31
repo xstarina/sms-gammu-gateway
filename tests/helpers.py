@@ -1,4 +1,4 @@
-"""Общие данные и заглушки для тестов."""
+"""Shared test data and doubles."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import gammu
 
 USERS = {'admin': 'secret'}
 
+# The text is deliberately Cyrillic: it exercises the non-Latin path end to end
 SMS = {
     'Date': '2026-01-01 12:00:00',
     'Number': '+79001234567',
@@ -27,11 +28,10 @@ AUTH = basic_auth()
 
 
 class FakeModem:
-    """Заглушка вместо устройства.
+    """Stand-in for the device.
 
-    Повторяет интерфейс sms_gateway.modem.Modem, хранит входящие в списке
-    и запоминает отправленные сообщения. С fail=True каждый вызов имитирует
-    ошибку модема.
+    Mirrors the interface of sms_gateway.modem.Modem, keeps the inbox in a list
+    and records sent messages. With fail=True every call simulates a modem error.
     """
 
     def __init__(self, messages: list[dict[str, Any]] | None = None, fail: bool = False) -> None:

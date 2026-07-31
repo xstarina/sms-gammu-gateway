@@ -1,4 +1,4 @@
-"""Проверки настроек из окружения и разбора файла с учётными данными."""
+"""Checks for environment settings and credentials file parsing."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ ENV_VARS = ('PORT', 'PIN', 'SSL', 'GAMMU_CONFIG', 'CREDENTIALS_FILE')
 
 @pytest.fixture
 def clean_env(monkeypatch):
-    """Окружение без переменных шлюза, чтобы тесты не зависели от машины."""
+    """Environment without gateway variables, so tests do not depend on the machine."""
     for name in ENV_VARS:
         monkeypatch.delenv(name, raising=False)
 
@@ -75,7 +75,7 @@ def test_settings_read_from_env(clean_env, monkeypatch):
 
 
 def test_empty_pin_treated_as_missing(clean_env, monkeypatch):
-    """Пустая переменная равнозначна незаданной, иначе модем получит пустой код."""
+    """An empty variable means "not set", otherwise the modem gets an empty code."""
     monkeypatch.setenv('PIN', '')
 
     assert Settings.from_env().pin is None
@@ -88,7 +88,7 @@ def test_parses_pairs(tmp_path):
 
 
 def test_trims_spaces_around_pair(tmp_path):
-    """Пробелы вокруг разделителя встречаются в готовых файлах и не должны попадать в пароль."""
+    """Spaces around the separator appear in real files and must not reach the password."""
     path = write_credentials(tmp_path, '  admin : secret  \n')
 
     assert load_users(path) == {'admin': 'secret'}
@@ -101,7 +101,7 @@ def test_password_may_contain_colon(tmp_path):
 
 
 def test_skips_blank_and_comment_lines(tmp_path):
-    path = write_credentials(tmp_path, '# основной пользователь\n\nadmin:secret\n\n')
+    path = write_credentials(tmp_path, '# main user\n\nadmin:secret\n\n')
 
     assert load_users(path) == {'admin': 'secret'}
 
@@ -109,9 +109,9 @@ def test_skips_blank_and_comment_lines(tmp_path):
 @pytest.mark.parametrize(
     'line',
     [
-        pytest.param('admin\n', id='нет разделителя'),
-        pytest.param(':secret\n', id='нет логина'),
-        pytest.param('admin:\n', id='нет пароля'),
+        pytest.param('admin\n', id='no separator'),
+        pytest.param(':secret\n', id='no username'),
+        pytest.param('admin:\n', id='no password'),
     ],
 )
 def test_skips_malformed_lines(tmp_path, line):
@@ -121,8 +121,8 @@ def test_skips_malformed_lines(tmp_path, line):
 
 
 def test_requires_at_least_one_pair(tmp_path):
-    """Пустой файл — ошибка конфигурации: иначе сервис поднимется без доступа."""
-    path = write_credentials(tmp_path, '# только комментарий\n')
+    """An empty file is a configuration error: otherwise the service starts with no access."""
+    path = write_credentials(tmp_path, '# comment only\n')
 
     with pytest.raises(GatewayError):
         load_users(path)
@@ -130,4 +130,4 @@ def test_requires_at_least_one_pair(tmp_path):
 
 def test_missing_file_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
-        load_users(str(tmp_path / 'нет-такого-файла.txt'))
+        load_users(str(tmp_path / 'no-such-file.txt'))

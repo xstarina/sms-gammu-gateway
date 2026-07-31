@@ -1,4 +1,4 @@
-"""Настройки из переменных окружения и чтение учётных данных."""
+"""Settings from environment variables and credentials loading."""
 
 from __future__ import annotations
 
@@ -14,12 +14,12 @@ logger = logging.getLogger(__name__)
 DEFAULT_GAMMU_CONFIG = 'config/gammu.config'
 DEFAULT_CREDENTIALS = 'config/credentials.txt'
 
-# Значения, которые считаются включённым флагом в окружении и параметрах запроса
+# Values treated as an enabled flag in the environment and in request parameters
 TRUTHY = frozenset({'1', 'true', 'yes', 'on'})
 
 
 def as_bool(value: Any) -> bool:
-    """Приводит строковый флаг к bool: 'false', '0' и пустое значение выключают его."""
+    """Coerce a string flag to bool: 'false', '0' and an empty value turn it off."""
     if isinstance(value, bool):
         return value
     return str(value or '').strip().lower() in TRUTHY
@@ -27,7 +27,7 @@ def as_bool(value: Any) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    """Параметры запуска. Пути к файлам можно переопределить окружением."""
+    """Runtime settings. File paths can be overridden through the environment."""
 
     port: int = 5000
     pin: str | None = None
@@ -47,9 +47,9 @@ class Settings:
 
 
 def load_users(filename: str = DEFAULT_CREDENTIALS) -> dict[str, str]:
-    """Читает пары «логин:пароль», по одной на строку.
+    """Read 'username:password' pairs, one per line.
 
-    Пустые строки и строки, начинающиеся с #, пропускаются.
+    Blank lines and lines starting with # are skipped.
     """
     users: dict[str, str] = {}
 
@@ -62,12 +62,12 @@ def load_users(filename: str = DEFAULT_CREDENTIALS) -> dict[str, str]:
             username, separator, password = line.partition(':')
             username, password = username.strip(), password.strip()
             if not separator or not username or not password:
-                logger.warning('%s, строка %d: ожидается формат «логин:пароль»', filename, number)
+                logger.warning('%s, line %d: expected the format "username:password"', filename, number)
                 continue
 
             users[username] = password
 
     if not users:
-        raise GatewayError(f'{filename}: не найдено ни одной пары «логин:пароль»')
+        raise GatewayError(f'{filename}: no "username:password" pair found')
 
     return users
