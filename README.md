@@ -80,7 +80,8 @@ take effect on a container restart, without rebuilding the image.
 
 | Tag | Contents |
 |---|---|
-| `latest`, `main` | Current state of the `main` branch |
+| `latest` | Most recent build, either from `main` or from a release tag |
+| `main` | Current state of the `main` branch |
 | `1.2.3` | A specific release, built from the `v1.2.3` git tag |
 | `1.2` | Latest patch within a minor version |
 
