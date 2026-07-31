@@ -7,6 +7,7 @@ Dockerfile
 LICENSE
 README.md
 README.ru.md
+CONTRIBUTING.md
 
 # Local Python environment must not shadow the one from the builder stage
 .venv

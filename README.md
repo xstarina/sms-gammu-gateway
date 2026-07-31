@@ -330,6 +330,12 @@ real, against a connected modem.
   the previous one to finish.
 - **SMS indices are unstable** — see the note on `/sms/<id>` above.
 
+## Contributing
+
+Patches are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for how to run the tests and what
+is expected of a change. One rule worth repeating here: `README.md` and `README.ru.md` are
+updated together, in the same commit.
+
 ## License
 
 Apache License 2.0, see [LICENSE](LICENSE).

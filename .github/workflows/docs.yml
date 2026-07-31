@@ -1,0 +1,57 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # README.md and README.ru.md are two views of the same document. This job keeps
+  # the Russian translation from silently falling behind the English original.
+  readme-sync:
+    name: README translations in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history so the previous commit is available for the diff below
+          fetch-depth: 0
+
+      # Structural comparison: heading levels in order, number of code blocks and
+      # table rows. Catches a section added to one language and not the other.
+      - name: Compare document structure
+        run: |
+          signature() {
+            grep '^#' "$1" | sed 's/ .*//'
+            echo "code-fences: $(grep -c '^```' "$1" || true)"
+            echo "table-rows: $(grep -c '^|' "$1" || true)"
+          }
+
+          if ! diff <(signature README.md) <(signature README.ru.md); then
+            echo "::error file=README.ru.md::README.md and README.ru.md have diverged structurally"
+            exit 1
+          fi
+          echo "Structure matches"
+
+      # Pairing check: prose edits keep the structure intact, so also require that
+      # both files are touched by the same change.
+      - name: Check that both files change together
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$BASE_SHA" ] || ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            echo "Base commit is unavailable, skipping the pairing check"
+            exit 0
+          fi
+
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          english=$(echo "$changed" | grep -cx 'README.md' || true)
+          russian=$(echo "$changed" | grep -cx 'README.ru.md' || true)
+
+          if [ "$english" != "$russian" ]; then
+            echo "::error file=README.ru.md::README.md and README.ru.md must be updated in the same change"
+            exit 1
+          fi
+          echo "Both READMEs are in step"
