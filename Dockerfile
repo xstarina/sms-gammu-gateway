@@ -94,23 +94,25 @@ LABEL org.opencontainers.image.title="SMS Gammu Gateway" \
 # The dialout group (GID 20) grants access to the forwarded modem: on most hosts
 # (Debian, Ubuntu, Alpine) /dev/tty* belongs to exactly this group. Hosts using a
 # different GID pass it with --group-add, see the README.
+# The UID is fixed rather than left to the next free number: USER below refers to
+# it numerically, and a shifted UID would silently point somewhere else.
 RUN set -ex; \
-    adduser -g 'Gammu User' -SDH gammu; \
+    adduser -g 'Gammu User' -SDH -u 100 gammu; \
     addgroup gammu dialout; \
     mkdir -p /ssl; \
     chown gammu /ssl
 
 # Only libGammu and libgsmsd are needed from the builder, _gammu.so links against
 # both, plus the gammu CLI for diagnostics. Headers and pkg-config files stay behind.
-COPY --from=builder /usr/local/bin/gammu /usr/local/bin/
-COPY --from=builder /usr/local/lib/lib*.so* /usr/local/lib/
+COPY --link --from=builder /usr/local/bin/gammu /usr/local/bin/
+COPY --link --from=builder /usr/local/lib/lib*.so* /usr/local/lib/
 
 # Code and environment belong to root: the application only needs to read them, and
 # it cannot rewrite its own files. Directories are listed explicitly to keep tests
 # and repository housekeeping files out of the image.
-COPY --from=builder /sms-gw/.venv/ ./.venv/
-COPY sms_gateway/ ./sms_gateway/
-COPY config/gammu.config ./config/
+COPY --link --from=builder /sms-gw/.venv/ ./.venv/
+COPY --link sms_gateway/ ./sms_gateway/
+COPY --link config/gammu.config ./config/
 
 # The environment on PATH allows calling python without a path, and unbuffered
 # output is what makes logs show up in docker logs right away.
@@ -119,7 +121,9 @@ ENV PATH="/sms-gw/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-USER gammu
+# Numeric on purpose: orchestrators that verify the container is not root, such as
+# Kubernetes with runAsNonRoot, cannot resolve a name from the image passwd file.
+USER 100
 EXPOSE 5000/tcp
 
 # TCP liveness probe: independent of both authentication and SSL.

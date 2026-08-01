@@ -41,11 +41,39 @@ jobs:
       - name: Run tests
         run: docker run --rm sms-gammu-gateway:test
 
+  # Scanning the runtime image, not the test one: the test stage carries compilers
+  # and headers that never ship. Publishing waits for this to pass.
+  scan:
+    name: Vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build the runtime image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: sms-gammu-gateway:scan
+          cache-from: type=gha,scope=linux/amd64
+
+      - name: Scan for known vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: sms-gammu-gateway:scan
+          severity: HIGH,CRITICAL
+          # Only actionable findings fail the build: an unfixed upstream CVE would
+          # otherwise block every release with nothing to do about it.
+          ignore-unfixed: true
+          exit-code: '1'
+
   # Each architecture builds on its own native runner: Gammu and python-gammu are
   # compiled from source, which would take tens of minutes under emulation.
   build:
     name: Build ${{ matrix.platform }}
-    needs: test
+    needs: [test, scan]
     if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -98,6 +126,9 @@ jobs:
           # to both registries, and the merge job assembles them into one image.
           # The name list is quoted so its comma is not read as a field separator.
           outputs: type=image,"name=${{ env.GHCR_IMAGE }},${{ env.DOCKERHUB_IMAGE }}",push-by-digest=true,name-canonical=true,push=true
+          # Inventory of packages inside the image, so scanners can match it
+          # against advisories without unpacking the layers
+          sbom: true
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
 

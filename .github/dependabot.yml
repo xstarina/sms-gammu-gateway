@@ -1,0 +1,28 @@
+version: 2
+
+# Everything here is pinned on purpose, which only works if something keeps the
+# pins moving. Pull requests run the tests, so an update that breaks the build
+# shows up before it is merged.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "Update"
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "Update"
+
+  # Tracks the alpine tag in the Dockerfile. The Gammu version lives in a build
+  # argument and stays a manual decision.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "Update"

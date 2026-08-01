@@ -158,6 +158,28 @@ services:
 
 Upgrading: `docker compose pull && docker compose up -d`.
 
+### Hardened run
+
+The container needs no capabilities and writes nothing to its own filesystem, so it can be
+locked down further:
+
+```yaml
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/lock          # only needed if lockdevice is enabled in gammu.config
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+```
+
+Port 5000 is above 1024 and access to the modem comes from the device group, so not a single
+capability is required. The image also runs as UID 100, declared numerically so that
+orchestrators verifying "not root" do not have to resolve a name.
+
 To build the image from your own copy of the sources, replace `image` with `build: .` — the
 rest of the settings stay the same.
 
