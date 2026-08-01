@@ -12,6 +12,7 @@ import gammu
 from flask import Flask, current_app, request
 from flask_httpauth import HTTPBasicAuth
 from flask_restful import Api, Resource, abort
+from werkzeug.security import check_password_hash
 
 from sms_gateway.config import Network, as_bool
 from sms_gateway.modem import Modem
@@ -19,8 +20,23 @@ from sms_gateway.modem import Modem
 logger = logging.getLogger(__name__)
 auth = HTTPBasicAuth()
 
+# Werkzeug puts the algorithm in front of the hash, which is what distinguishes a
+# hashed password from one written in the clear
+HASH_PREFIXES = ('scrypt:', 'pbkdf2:')
+
 # Reply for an empty inbox: same structure, empty fields
 EMPTY_SMS = {'Date': '', 'Number': '', 'State': '', 'Text': ''}
+
+
+def password_matches(expected: str, given: str) -> bool:
+    """Compare against a stored password, hashed or plain.
+
+    Both branches take the same time whatever the input, so neither a plain
+    password nor a hash can be guessed from how long the answer took.
+    """
+    if expected.startswith(HASH_PREFIXES):
+        return check_password_hash(expected, given)
+    return hmac.compare_digest(expected, given)
 
 
 @auth.verify_password
@@ -29,8 +45,7 @@ def verify_password(username: str, password: str) -> str | None:
     if not expected or not password:
         return None
 
-    # Constant-time comparison so the password cannot be guessed from response timing
-    if not hmac.compare_digest(expected, password):
+    if not password_matches(expected, password):
         return None
 
     return username

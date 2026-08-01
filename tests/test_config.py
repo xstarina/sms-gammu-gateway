@@ -144,18 +144,21 @@ def test_parses_networks(raw, expected):
     assert parse_networks(raw) == tuple(ipaddress.ip_network(item) for item in expected)
 
 
+def test_unset_variable_leaves_access_open():
+    """Not asking for a whitelist is a valid answer; a broken one is not."""
+    assert parse_networks('') == ()
+
+
 @pytest.mark.parametrize(
     'raw',
     [
-        pytest.param('', id='empty'),
         pytest.param('not-an-address', id='nonsense'),
         pytest.param('999.1.1.1', id='out of range'),
+        pytest.param('10.0.0.0/8,nonsense', id='one entry of two broken'),
+        pytest.param('10.0.0.0/64', id='impossible prefix'),
     ],
 )
-def test_unusable_networks_leave_access_open(raw):
-    """A typo here must not take a working gateway down, so it only warns."""
-    assert parse_networks(raw) == ()
-
-
-def test_valid_entries_survive_a_broken_neighbour():
-    assert parse_networks('10.0.0.0/8,nonsense') == (ipaddress.ip_network('10.0.0.0/8'),)
+def test_unusable_networks_stop_the_gateway(raw):
+    """Skipping the entry would silently expose the API the whitelist was meant to close."""
+    with pytest.raises(GatewayError):
+        parse_networks(raw)

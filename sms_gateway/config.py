@@ -71,9 +71,10 @@ def parse_users(raw: str) -> dict[str, str]:
 def parse_networks(raw: str) -> tuple[Network, ...]:
     """Read addresses and subnets from the ALLOWED_NETWORKS variable.
 
-    Unparsable entries are skipped with a warning rather than refusing to start:
-    a typo here must not take a working gateway down. An empty result means no
-    restriction at all, which is also what an unset variable gives.
+    An unparsable entry stops the gateway. Skipping it would leave the API open
+    to everyone while the log quietly mentioned a typo, and a whitelist that
+    silently does nothing is worse than no whitelist at all. An unset variable is
+    still a valid answer and means no restriction.
     """
     networks: list[Network] = []
 
@@ -83,10 +84,11 @@ def parse_networks(raw: str) -> tuple[Network, ...]:
 
         try:
             networks.append(ipaddress.ip_network(entry, strict=False))
-        except ValueError:
-            logger.warning(
-                'ALLOWED_NETWORKS: %r is not an address or a subnet, ignoring it', entry
-            )
+        except ValueError as error:
+            raise GatewayError(
+                f'ALLOWED_NETWORKS: {entry!r} is not an address or a subnet ({error}). '
+                f'Fix it, or unset the variable to allow access from anywhere.'
+            ) from error
 
     return tuple(networks)
 

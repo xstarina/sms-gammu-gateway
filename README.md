@@ -192,6 +192,38 @@ The gateway refuses to start when `USERS` is unset or holds anything that is not
 and says which entry it choked on. Credentials are the one thing it cannot guess, so guessing
 is not attempted.
 
+#### Storing a hash instead of the password
+
+A password written into the environment is readable by anyone who can run `docker inspect` or
+open the compose file. Instead of the password itself the variable may carry its hash, which
+cannot be turned back into the password and cannot be used to log in.
+
+Generate one with the image itself, no extra tooling required:
+
+```bash
+docker run --rm --entrypoint python ghcr.io/xstarina/sms-gammu-gateway:latest \
+  -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('your-password'))"
+```
+
+Put the result where the password used to be:
+
+```yaml
+    environment:
+      USERS: admin:scrypt:32768:8:1$$EenbwQ2I$$3ae74334d821...
+```
+
+**Double every `$` in a compose file**, as shown above: compose reads a single one as the start
+of a variable and would silently mangle the hash. On a `docker run` command line single quotes
+around the value are enough.
+
+Hashes and plain passwords may be mixed in the same variable — anything starting with `scrypt:`
+or `pbkdf2:` is treated as a hash. Verification costs about 70 ms per request by design, which
+is what makes a stolen hash expensive to attack; for a gateway sending a handful of messages
+that is not a load worth worrying about.
+
+Note that this protects the password where it is stored, not where it travels: HTTP Basic auth
+still sends the password itself with every request, so use `SSL` or a trusted network.
+
 ### The modem configuration
 
 Connection settings live in the image in the [Gammu format](https://wammu.eu/docs/manual/config/index.html):
@@ -241,10 +273,10 @@ The check runs before authentication, so a stranger never gets as far as guessin
 refused requests get `403` and a line in the log. Leaving the variable unset places no
 restriction at all.
 
-Entries that are not addresses or subnets are skipped with a warning rather than stopping the
-gateway, and if nothing valid remains the API stays open — a typo here must not take a working
-gateway down. **Check the log after changing this variable**, since a silently ignored typo
-leaves the API reachable from everywhere.
+An entry that is not an address or a subnet stops the gateway with a message naming it.
+Skipping it would leave the API open to everyone while the log quietly mentioned a typo, and a
+whitelist that silently does nothing is worse than no whitelist at all. Leaving the variable
+unset remains a valid answer.
 
 The address compared is the one the server sees. Behind a reverse proxy that is the proxy
 itself, and forwarded headers are deliberately not trusted: anyone can send those. Restrict by
@@ -435,9 +467,9 @@ real, against a connected modem.
 
 - **The built-in Flask server is used** (`app.run`), which is not meant for production load.
   For permanent deployments put nginx in front of it or run it through a WSGI server.
-- **Passwords are passed in plain text** through `USERS`, so they are visible to anyone who
-  can run `docker inspect` on the host or read the compose file. Keep that file out of version
-  control, and put a reverse proxy in front for anything more demanding.
+- **Basic auth sends the password with every request**, so the connection is what protects it:
+  use `SSL`, or keep the gateway on a trusted network. Storing a hash in `USERS` protects where
+  the password rests, not how it travels.
 - **Modem requests are serialised.** Gammu keeps a single connection to the device, so calls
   are serialised by a lock: concurrent requests do not corrupt each other, but they do wait for
   the previous one to finish.
