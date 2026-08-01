@@ -22,9 +22,8 @@ sms_gateway/          application code
 ├── config.py         environment settings and credentials
 ├── errors.py         application-level exceptions
 └── __main__.py       entry point: wiring and server start
-config/               configuration, mounted into the container
-├── gammu.config      modem connection
-└── credentials.txt   usernames and passwords, created from the .example file
+config/               modem configuration, baked into the image
+└── gammu.config      connection settings
 tests/                tests against a fake modem
 .github/workflows/    image build and publishing
 Dockerfile            Gammu, environment and runtime image build
@@ -59,30 +58,24 @@ starina/sms-gammu-gateway:latest
 ```
 
 ```bash
-# 1. Prepare the configuration
-mkdir -p config && cd config
-curl -O https://raw.githubusercontent.com/xstarina/sms-gammu-gateway/main/config/gammu.config
-echo 'admin:your-password' > credentials.txt
-cd ..
-
-# 2. Run it
 docker run -d --name sms-gw \
   -p 5000:5000 \
   --device=/dev/ttyUSB0:/dev/mobile \
   --group-add "$(stat -c '%g' /dev/ttyUSB0)" \
-  -v "$PWD/config:/sms-gw/config:ro" \
+  -e USERS=admin:your-password \
   --restart unless-stopped \
   ghcr.io/xstarina/sms-gammu-gateway:latest
 ```
+
+That is the whole setup: nothing to prepare beforehand and nothing to mount. The modem
+configuration ships inside the image and expects the device at `/dev/mobile`, which is exactly
+what the `--device` mapping provides.
 
 Check that it works:
 
 ```bash
 curl -u admin:your-password http://localhost:5000/signal
 ```
-
-The whole `config` directory is mounted, so edits to `gammu.config` and `credentials.txt`
-take effect on a container restart, without rebuilding the image.
 
 ### Image tags
 
@@ -112,15 +105,13 @@ Needed if you want to change the code or pin your own Gammu version:
 ```bash
 git clone https://github.com/xstarina/sms-gammu-gateway.git
 cd sms-gammu-gateway
-cp config/credentials.txt.example config/credentials.txt
-$EDITOR config/credentials.txt
 
 docker build -t sms-gammu-gateway .
 docker run -d --name sms-gw \
   -p 5000:5000 \
   --device=/dev/ttyUSB0:/dev/mobile \
   --group-add "$(stat -c '%g' /dev/ttyUSB0)" \
-  -v "$PWD/config:/sms-gw/config:ro" \
+  -e USERS=admin:your-password \
   sms-gammu-gateway
 ```
 
@@ -148,9 +139,8 @@ services:
       - /dev/ttyUSB0:/dev/mobile
     group_add:
       - "20"          # GID of the group owning /dev/ttyUSB0 on the host
-    volumes:
-      - ./config:/sms-gw/config:ro
     environment:
+      USERS: admin:your-password
       PIN: "1234"
       TZ: Europe/Moscow
     restart: unless-stopped
@@ -185,22 +175,26 @@ rest of the settings stay the same.
 
 ## Configuration
 
-### config/credentials.txt
+### Credentials
 
-Usernames and passwords for HTTP Basic auth, one `username:password` pair per line. A template
-sits next to it in [config/credentials.txt.example](https://github.com/xstarina/sms-gammu-gateway/blob/main/config/credentials.txt.example):
+Pairs for HTTP Basic auth come from `USERS`, and there is no credentials file to prepare:
 
+```yaml
+    environment:
+      USERS: admin:your-password,monitoring:another-password
 ```
-admin:password
-```
 
-**The file is neither stored in the repository nor baked into the image** — otherwise the
-password would end up in an image layer. Create it and mount it at runtime, or the container
-will fail at startup with `No such file or directory: 'config/credentials.txt'`.
+Pairs are separated by commas, spaces or newlines, so a compose block scalar with one pair per
+line reads just as well. A password may contain colons — only the first one separates — but not
+commas or spaces, since those end the pair.
 
-### config/gammu.config
+The gateway refuses to start when `USERS` is unset or holds anything that is not a usable pair,
+and says which entry it choked on. Credentials are the one thing it cannot guess, so guessing
+is not attempted.
 
-Modem connection settings in the [Gammu format](https://wammu.eu/docs/manual/config/index.html):
+### The modem configuration
+
+Connection settings live in the image in the [Gammu format](https://wammu.eu/docs/manual/config/index.html):
 
 ```ini
 [gammu]
@@ -209,22 +203,52 @@ name = Phone on USB serial port
 connection = at
 ```
 
-Inside the container the device is expected at `/dev/mobile`, which is why the run examples use
-`--device=/dev/ttyUSB0:/dev/mobile`. If you would rather point at the real device path, change
-`device` in this file.
+The device is expected at `/dev/mobile`, which is why the run examples map
+`--device=/dev/ttyUSB0:/dev/mobile`. This suits the common case, so nothing has to be mounted.
+
+For anything else — a different connection type, a Bluetooth phone, a real device path instead
+of the mapping — write your own file and mount it over this one, or point `GAMMU_CONFIG` at it:
+
+```yaml
+    volumes:
+      - ./gammu.config:/sms-gw/config/gammu.config:ro
+```
 
 ### Environment variables
 
 | Variable | Default | Description |
 |---|---|---|
+| `USERS` | **required** | Pairs for Basic auth, `admin:secret`, separated by commas, spaces or newlines |
+| `ALLOWED_NETWORKS` | unset | Addresses and subnets allowed to reach the API. Unset means no restriction |
 | `PIN` | unset | SIM card PIN. Required only if the card asks for one; without it the gateway will not start |
 | `PORT` | `5000` | HTTP server port |
 | `SSL` | off | Enables HTTPS. `1`, `true`, `yes` and `on` are truthy (case-insensitive), anything else turns it off |
 | `GAMMU_CONFIG` | `config/gammu.config` | Path to the Gammu configuration file |
-| `CREDENTIALS_FILE` | `config/credentials.txt` | Path to the credentials file |
 | `TZ` | `UTC` | Container timezone, for example `Europe/Moscow`. Controls timestamps in the logs |
 | `WATCHDOG_INTERVAL` | `60` | Seconds between modem probes. `0` turns the watchdog off |
 | `WATCHDOG_FAILURES` | `3` | Failed probes in a row before the session is rebuilt |
+
+### Restricting access by address
+
+`ALLOWED_NETWORKS` limits who may reach the API. Individual addresses and subnets both work:
+
+```yaml
+    environment:
+      ALLOWED_NETWORKS: 10.0.0.0/8,192.168.1.5
+```
+
+The check runs before authentication, so a stranger never gets as far as guessing a password;
+refused requests get `403` and a line in the log. Leaving the variable unset places no
+restriction at all.
+
+Entries that are not addresses or subnets are skipped with a warning rather than stopping the
+gateway, and if nothing valid remains the API stays open — a typo here must not take a working
+gateway down. **Check the log after changing this variable**, since a silently ignored typo
+leaves the API reachable from everywhere.
+
+The address compared is the one the server sees. Behind a reverse proxy that is the proxy
+itself, and forwarded headers are deliberately not trusted: anyone can send those. Restrict by
+address on the proxy in that case.
 
 ### Recovering from a wedged modem
 
@@ -270,8 +294,7 @@ at startup and says so.
 
 ## API
 
-Every endpoint requires HTTP Basic authentication against the pairs in
-`config/credentials.txt`.
+Every endpoint requires HTTP Basic authentication against the pairs in `USERS`.
 
 | Method | Path | Description |
 |---|---|---|
@@ -404,7 +427,7 @@ docker run --rm sms-gammu-gateway-test
 
 Covered are the HTTP layer ([tests/test_api.py](https://github.com/xstarina/sms-gammu-gateway/blob/main/tests/test_api.py)) — authentication on every
 route, status codes, parameter parsing — and configuration
-([tests/test_config.py](https://github.com/xstarina/sms-gammu-gateway/blob/main/tests/test_config.py)): environment variables and credentials loading.
+([tests/test_config.py](https://github.com/xstarina/sms-gammu-gateway/blob/main/tests/test_config.py)): environment variables, credentials and the address whitelist.
 The device conversation inside `sms_gateway.modem` is not covered: it can only be verified for
 real, against a connected modem.
 
@@ -412,8 +435,9 @@ real, against a connected modem.
 
 - **The built-in Flask server is used** (`app.run`), which is not meant for production load.
   For permanent deployments put nginx in front of it or run it through a WSGI server.
-- **Passwords are stored in plain text** in `config/credentials.txt` — that is what the format
-  requires, not an oversight; keep the file at mode `600` and never commit real credentials.
+- **Passwords are passed in plain text** through `USERS`, so they are visible to anyone who
+  can run `docker inspect` on the host or read the compose file. Keep that file out of version
+  control, and put a reverse proxy in front for anything more demanding.
 - **Modem requests are serialised.** Gammu keeps a single connection to the device, so calls
   are serialised by a lock: concurrent requests do not corrupt each other, but they do wait for
   the previous one to finish.

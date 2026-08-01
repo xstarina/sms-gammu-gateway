@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import logging
 from functools import wraps
 from typing import Any, Callable
@@ -12,7 +13,7 @@ from flask import Flask, current_app, request
 from flask_httpauth import HTTPBasicAuth
 from flask_restful import Api, Resource, abort
 
-from sms_gateway.config import as_bool
+from sms_gateway.config import Network, as_bool
 from sms_gateway.modem import Modem
 
 logger = logging.getLogger(__name__)
@@ -161,9 +162,40 @@ class Reset(ModemResource):
         return {'status': 200, 'message': 'Reset done'}, 200
 
 
-def create_app(modem: Modem, users: dict[str, str]) -> Flask:
+def reject_foreign_addresses(networks: tuple[Network, ...]) -> Callable[[], None]:
+    """Refuse anything coming from outside the listed addresses and subnets.
+
+    Runs before authentication, so a stranger never gets as far as guessing a
+    password. The check uses the peer address as seen by the server: behind a
+    reverse proxy that is the proxy itself, and trusting a forwarded header
+    instead would let anyone claim any address.
+    """
+
+    def check() -> None:
+        try:
+            address = ipaddress.ip_address(request.remote_addr or '')
+        except ValueError:
+            logger.warning('Rejected a request from an unreadable address')
+            abort(403, message='Access denied')
+
+        if not any(address in network for network in networks):
+            logger.warning('Rejected a request from %s', address)
+            abort(403, message='Access denied')
+
+    return check
+
+
+def create_app(
+    modem: Modem, users: dict[str, str], allowed_networks: tuple[Network, ...] = ()
+) -> Flask:
     app = Flask(__name__)
     app.config['USERS'] = users
+
+    if allowed_networks:
+        logger.info(
+            'Access limited to %s', ', '.join(str(network) for network in allowed_networks)
+        )
+        app.before_request(reject_foreign_addresses(allowed_networks))
 
     api = Api(app)
     resource_args = {'resource_class_args': [modem]}

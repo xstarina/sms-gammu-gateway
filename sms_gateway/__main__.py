@@ -11,7 +11,7 @@ from types import FrameType
 import gammu
 
 from sms_gateway.api import create_app
-from sms_gateway.config import Settings, load_users
+from sms_gateway.config import Settings
 from sms_gateway.errors import GatewayError
 from sms_gateway.modem import Modem
 from sms_gateway.watchdog import Watchdog
@@ -94,19 +94,17 @@ def main() -> None:
         format='%(asctime)s %(levelname)s %(name)s: %(message)s',
     )
 
-    settings = Settings.from_env()
-
     try:
-        # Decided before the modem is opened: a misconfigured certificate should
-        # not cost a round trip to the device before it is reported
+        # Everything that can be judged without touching the device is judged
+        # first: a typo in the environment should not cost a round trip to a modem
+        settings = Settings.from_env()
         context = ssl_context(settings)
-        users = load_users(settings.credentials_file)
         modem = Modem(pin=settings.pin, config_file=settings.gammu_config)
-    except (OSError, GatewayError, gammu.GSMError) as error:
+    except (OSError, ValueError, GatewayError, gammu.GSMError) as error:
         logger.error('Failed to start the gateway: %s', error)
         raise SystemExit(1) from error
 
-    app = create_app(modem, users)
+    app = create_app(modem, settings.users, settings.allowed_networks)
     install_signal_handlers()
 
     watchdog = Watchdog(

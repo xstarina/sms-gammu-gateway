@@ -1,19 +1,30 @@
-"""Checks for environment settings and credentials file parsing."""
+"""Checks for settings taken from the environment."""
 
 from __future__ import annotations
+
+import ipaddress
 
 import pytest
 
 from sms_gateway.config import (
-    DEFAULT_CREDENTIALS,
     DEFAULT_GAMMU_CONFIG,
     Settings,
     as_bool,
-    load_users,
+    parse_networks,
+    parse_users,
 )
 from sms_gateway.errors import GatewayError
 
-ENV_VARS = ('PORT', 'PIN', 'SSL', 'GAMMU_CONFIG', 'CREDENTIALS_FILE')
+ENV_VARS = (
+    'PORT',
+    'PIN',
+    'SSL',
+    'GAMMU_CONFIG',
+    'USERS',
+    'ALLOWED_NETWORKS',
+    'WATCHDOG_INTERVAL',
+    'WATCHDOG_FAILURES',
+)
 
 
 @pytest.fixture
@@ -21,12 +32,6 @@ def clean_env(monkeypatch):
     """Environment without gateway variables, so tests do not depend on the machine."""
     for name in ENV_VARS:
         monkeypatch.delenv(name, raising=False)
-
-
-def write_credentials(tmp_path, content: str) -> str:
-    path = tmp_path / 'credentials.txt'
-    path.write_text(content, encoding='utf-8')
-    return str(path)
 
 
 @pytest.mark.parametrize(
@@ -48,14 +53,16 @@ def test_as_bool(value, expected):
     assert as_bool(value) is expected
 
 
-def test_settings_defaults(clean_env):
+def test_settings_defaults(clean_env, monkeypatch):
+    monkeypatch.setenv('USERS', 'admin:secret')
+
     settings = Settings.from_env()
 
     assert settings.port == 5000
     assert settings.pin is None
     assert settings.ssl is False
     assert settings.gammu_config == DEFAULT_GAMMU_CONFIG
-    assert settings.credentials_file == DEFAULT_CREDENTIALS
+    assert settings.allowed_networks == ()
 
 
 def test_settings_read_from_env(clean_env, monkeypatch):
@@ -63,7 +70,8 @@ def test_settings_read_from_env(clean_env, monkeypatch):
     monkeypatch.setenv('PIN', '1234')
     monkeypatch.setenv('SSL', 'yes')
     monkeypatch.setenv('GAMMU_CONFIG', '/etc/gammu.conf')
-    monkeypatch.setenv('CREDENTIALS_FILE', '/run/secrets/users')
+    monkeypatch.setenv('USERS', 'admin:secret')
+    monkeypatch.setenv('ALLOWED_NETWORKS', '10.0.0.0/8')
 
     settings = Settings.from_env()
 
@@ -71,63 +79,83 @@ def test_settings_read_from_env(clean_env, monkeypatch):
     assert settings.pin == '1234'
     assert settings.ssl is True
     assert settings.gammu_config == '/etc/gammu.conf'
-    assert settings.credentials_file == '/run/secrets/users'
+    assert settings.users == {'admin': 'secret'}
+    assert settings.allowed_networks == (ipaddress.ip_network('10.0.0.0/8'),)
 
 
 def test_empty_pin_treated_as_missing(clean_env, monkeypatch):
     """An empty variable means "not set", otherwise the modem gets an empty code."""
+    monkeypatch.setenv('USERS', 'admin:secret')
     monkeypatch.setenv('PIN', '')
 
     assert Settings.from_env().pin is None
 
 
-def test_parses_pairs(tmp_path):
-    path = write_credentials(tmp_path, 'admin:secret\nuser:pass\n')
-
-    assert load_users(path) == {'admin': 'secret', 'user': 'pass'}
-
-
-def test_trims_spaces_around_pair(tmp_path):
-    """Spaces around the separator appear in real files and must not reach the password."""
-    path = write_credentials(tmp_path, '  admin : secret  \n')
-
-    assert load_users(path) == {'admin': 'secret'}
-
-
-def test_password_may_contain_colon(tmp_path):
-    path = write_credentials(tmp_path, 'admin:se:cret\n')
-
-    assert load_users(path) == {'admin': 'se:cret'}
-
-
-def test_skips_blank_and_comment_lines(tmp_path):
-    path = write_credentials(tmp_path, '# main user\n\nadmin:secret\n\n')
-
-    assert load_users(path) == {'admin': 'secret'}
+def test_parses_one_pair():
+    assert parse_users('admin:secret') == {'admin': 'secret'}
 
 
 @pytest.mark.parametrize(
-    'line',
+    'raw',
     [
-        pytest.param('admin\n', id='no separator'),
-        pytest.param(':secret\n', id='no username'),
-        pytest.param('admin:\n', id='no password'),
+        pytest.param('admin:secret,user:pass', id='commas'),
+        pytest.param('admin:secret user:pass', id='spaces'),
+        pytest.param('admin:secret\nuser:pass\n', id='newlines'),
     ],
 )
-def test_skips_malformed_lines(tmp_path, line):
-    path = write_credentials(tmp_path, f'{line}user:pass\n')
+def test_separators_between_pairs(raw):
+    """Compose can pass a block scalar with one pair per line just as well."""
+    assert parse_users(raw) == {'admin': 'secret', 'user': 'pass'}
 
-    assert load_users(path) == {'user': 'pass'}
+
+def test_password_may_contain_colon():
+    assert parse_users('admin:se:cret') == {'admin': 'se:cret'}
 
 
-def test_requires_at_least_one_pair(tmp_path):
-    """An empty file is a configuration error: otherwise the service starts with no access."""
-    path = write_credentials(tmp_path, '# comment only\n')
-
+@pytest.mark.parametrize(
+    'raw',
+    [
+        pytest.param('', id='empty'),
+        pytest.param('   ', id='blank'),
+        pytest.param('admin', id='no separator'),
+        pytest.param(':secret', id='no login'),
+        pytest.param('admin:', id='no password'),
+        pytest.param('admin:secret,broken', id='one pair of two broken'),
+    ],
+)
+def test_unusable_credentials_stop_the_gateway(raw):
+    """Credentials cannot be guessed, so anything unusable is a startup error."""
     with pytest.raises(GatewayError):
-        load_users(path)
+        parse_users(raw)
 
 
-def test_missing_file_raises(tmp_path):
-    with pytest.raises(FileNotFoundError):
-        load_users(str(tmp_path / 'no-such-file.txt'))
+@pytest.mark.parametrize(
+    'raw, expected',
+    [
+        pytest.param('192.168.1.10', ['192.168.1.10/32'], id='single address'),
+        pytest.param('10.0.0.0/8', ['10.0.0.0/8'], id='subnet'),
+        pytest.param('10.0.0.0/8,192.168.1.10', ['10.0.0.0/8', '192.168.1.10/32'], id='both'),
+        pytest.param('10.0.0.0/8 192.168.0.0/16', ['10.0.0.0/8', '192.168.0.0/16'], id='spaces'),
+        pytest.param('2001:db8::/32', ['2001:db8::/32'], id='ipv6'),
+        pytest.param('192.168.1.42/24', ['192.168.1.0/24'], id='host bits are trimmed'),
+    ],
+)
+def test_parses_networks(raw, expected):
+    assert parse_networks(raw) == tuple(ipaddress.ip_network(item) for item in expected)
+
+
+@pytest.mark.parametrize(
+    'raw',
+    [
+        pytest.param('', id='empty'),
+        pytest.param('not-an-address', id='nonsense'),
+        pytest.param('999.1.1.1', id='out of range'),
+    ],
+)
+def test_unusable_networks_leave_access_open(raw):
+    """A typo here must not take a working gateway down, so it only warns."""
+    assert parse_networks(raw) == ()
+
+
+def test_valid_entries_survive_a_broken_neighbour():
+    assert parse_networks('10.0.0.0/8,nonsense') == (ipaddress.ip_network('10.0.0.0/8'),)

@@ -3,6 +3,3 @@ __pycache__/
 *.pyc
 .pytest_cache/
 ssl/
-
-# Real credentials, the template lives next to it as credentials.txt.example
-config/credentials.txt

@@ -14,6 +14,3 @@ CONTRIBUTING.md
 __pycache__/
 *.pyc
 .pytest_cache/
-
-# Secrets stay out of the image, credentials.txt is mounted at runtime (see README)
-config/credentials.txt

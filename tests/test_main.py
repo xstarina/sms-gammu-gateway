@@ -87,9 +87,11 @@ def test_modem_is_released_on_shutdown(restore_sigterm, monkeypatch):
         def run(self, **kwargs):
             raise SystemExit('received SIGTERM')
 
-    monkeypatch.setattr(entry_point, 'load_users', lambda filename: {'admin': 'secret'})
+    monkeypatch.setenv('USERS', 'admin:secret')
     monkeypatch.setattr(entry_point, 'Modem', lambda pin, config_file: modem)
-    monkeypatch.setattr(entry_point, 'create_app', lambda modem, users: StoppedServer())
+    monkeypatch.setattr(
+        entry_point, 'create_app', lambda modem, users, networks: StoppedServer()
+    )
 
     with pytest.raises(SystemExit):
         entry_point.main()

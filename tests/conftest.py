@@ -12,9 +12,9 @@ from sms_gateway.api import create_app
 def make_client():
     """Client factory: lets a test choose the inbox contents and modem behaviour."""
 
-    def factory(messages=None, fail=False):
+    def factory(messages=None, fail=False, allowed_networks=()):
         modem = FakeModem(messages, fail)
-        app = create_app(modem, USERS)
+        app = create_app(modem, USERS, allowed_networks)
         app.config['TESTING'] = True
 
         client = app.test_client()
