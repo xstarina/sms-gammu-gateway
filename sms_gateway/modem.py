@@ -27,11 +27,17 @@ class Modem:
     """
 
     def __init__(self, pin: str | None = None, config_file: str = DEFAULT_GAMMU_CONFIG) -> None:
+        self._pin = pin
+        self._config_file = config_file
         self._lock = threading.Lock()
+        self._connect()
+
+    def _connect(self) -> None:
+        """Open a fresh session. Call only while holding the lock, or from __init__."""
         self._machine = gammu.StateMachine()
-        self._machine.ReadConfig(Filename=config_file)
+        self._machine.ReadConfig(Filename=self._config_file)
         self._machine.Init()
-        self._unlock_sim(pin)
+        self._unlock_sim(self._pin)
 
     def _unlock_sim(self, pin: str | None) -> None:
         if self._machine.GetSecurityStatus() != 'PIN':
@@ -40,6 +46,21 @@ class Modem:
             raise GatewayError('SIM card asks for a PIN, set the PIN environment variable')
         self._machine.EnterSecurityCode('PIN', pin)
         logger.info('PIN accepted')
+
+    def probe(self) -> None:
+        """Cheapest question the modem can answer. Raises if it does not."""
+        with self._lock:
+            self._machine.GetSignalQuality()
+
+    def reconnect(self) -> None:
+        """Rebuild the session with the device, discarding the previous one."""
+        with self._lock:
+            try:
+                self._machine.Terminate()
+            except gammu.GSMError as error:
+                # A wedged modem may refuse to say goodbye; reopening is what matters
+                logger.warning('Modem did not close cleanly: %s', error)
+            self._connect()
 
     def close(self) -> None:
         """Release the serial port. Safe to call more than once."""

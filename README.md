@@ -201,6 +201,26 @@ Inside the container the device is expected at `/dev/mobile`, which is why the r
 | `GAMMU_CONFIG` | `config/gammu.config` | Path to the Gammu configuration file |
 | `CREDENTIALS_FILE` | `config/credentials.txt` | Path to the credentials file |
 | `TZ` | `UTC` | Container timezone, for example `Europe/Moscow`. Controls timestamps in the logs |
+| `WATCHDOG_INTERVAL` | `60` | Seconds between modem probes. `0` turns the watchdog off |
+| `WATCHDOG_FAILURES` | `3` | Failed probes in a row before the session is rebuilt |
+
+### Recovering from a wedged modem
+
+A modem that hangs rarely reports an error, it simply stops answering. A background watchdog
+asks it for the signal quality every `WATCHDOG_INTERVAL` seconds. Single failures are ignored —
+the modem may be busy sending an SMS — but after `WATCHDOG_FAILURES` of them in a row the Gammu
+session is torn down and opened again, which clears most hangs without touching the container.
+
+If reopening the device fails as well, the process exits with a non-zero code and leaves the
+rest to the restart policy, so make sure the container has one:
+
+```yaml
+    restart: unless-stopped
+```
+
+Loss of network registration is deliberately **not** treated as a fault. No amount of
+restarting brings a cell tower back, and reacting to it would turn weak signal into a restart
+loop. Watch `/signal` and `/network` for that instead.
 
 ### HTTPS
 

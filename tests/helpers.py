@@ -43,6 +43,12 @@ class FakeModem:
     def close(self) -> None:
         self.closed = True
 
+    def probe(self) -> None:
+        self._check()
+
+    def reconnect(self) -> None:
+        self.fail = False
+
     def _check(self) -> None:
         if self.fail:
             raise gammu.ERR_TIMEOUT('device timeout')

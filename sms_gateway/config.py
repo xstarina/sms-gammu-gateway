@@ -14,6 +14,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_GAMMU_CONFIG = 'config/gammu.config'
 DEFAULT_CREDENTIALS = 'config/credentials.txt'
 
+# Seconds between modem probes, and how many failures in a row mean it is wedged.
+# Zero as the interval turns the watchdog off.
+DEFAULT_WATCHDOG_INTERVAL = 60.0
+DEFAULT_WATCHDOG_FAILURES = 3
+
 # Values treated as an enabled flag in the environment and in request parameters
 TRUTHY = frozenset({'1', 'true', 'yes', 'on'})
 
@@ -34,6 +39,8 @@ class Settings:
     ssl: bool = False
     gammu_config: str = DEFAULT_GAMMU_CONFIG
     credentials_file: str = DEFAULT_CREDENTIALS
+    watchdog_interval: float = DEFAULT_WATCHDOG_INTERVAL
+    watchdog_failures: int = DEFAULT_WATCHDOG_FAILURES
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -43,6 +50,12 @@ class Settings:
             ssl=as_bool(os.getenv('SSL')),
             gammu_config=os.getenv('GAMMU_CONFIG', DEFAULT_GAMMU_CONFIG),
             credentials_file=os.getenv('CREDENTIALS_FILE', DEFAULT_CREDENTIALS),
+            watchdog_interval=float(
+                os.getenv('WATCHDOG_INTERVAL', str(DEFAULT_WATCHDOG_INTERVAL))
+            ),
+            watchdog_failures=int(
+                os.getenv('WATCHDOG_FAILURES', str(DEFAULT_WATCHDOG_FAILURES))
+            ),
         )
 
 

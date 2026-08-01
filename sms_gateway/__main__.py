@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import signal
 from types import FrameType
 
@@ -12,6 +13,7 @@ from sms_gateway.api import create_app
 from sms_gateway.config import Settings, load_users
 from sms_gateway.errors import GatewayError
 from sms_gateway.modem import Modem
+from sms_gateway.watchdog import Watchdog
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,16 @@ def _shutdown(signum: int, _frame: FrameType | None) -> None:
     # Exit code zero: a requested stop is not a failure, and restart policies
     # such as on-failure would otherwise bring the container straight back
     raise SystemExit(0)
+
+
+def _give_up() -> None:
+    """Leave with a failure code so the restart policy brings the container back.
+
+    Called from the watchdog thread, where raising would only kill that thread,
+    so the process is ended directly.
+    """
+    logger.critical('Modem cannot be reached, exiting for a restart')
+    os._exit(1)
 
 
 def install_signal_handlers() -> None:
@@ -55,6 +67,14 @@ def main() -> None:
     app = create_app(modem, users)
     install_signal_handlers()
 
+    watchdog = Watchdog(
+        modem,
+        interval=settings.watchdog_interval,
+        failures=settings.watchdog_failures,
+        on_lost=_give_up,
+    )
+    watchdog.start()
+
     try:
         # Listen on every interface: only the published port is reachable from outside
         app.run(
@@ -63,6 +83,7 @@ def main() -> None:
             ssl_context=SSL_CERTIFICATE if settings.ssl else None,
         )
     finally:
+        watchdog.stop()
         # Hand the serial port back, so the next start does not find it busy
         logger.info('Shutting down')
         modem.close()
