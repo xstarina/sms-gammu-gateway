@@ -198,28 +198,35 @@ A password written into the environment is readable by anyone who can run `docke
 open the compose file. Instead of the password itself the variable may carry its hash, which
 cannot be turned back into the password and cannot be used to log in.
 
-Generate one with the image itself, no extra tooling required:
+`htpasswd` prints exactly the `login:hash` pair this variable expects:
 
 ```bash
-docker run --rm --entrypoint python ghcr.io/xstarina/sms-gammu-gateway:latest \
-  -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('your-password'))"
+htpasswd -nbB admin your-password
+# admin:$2y$05$9F7kBCq2MTqsnSehrbZeKu3E1mJzt38dffCKJJsHZFVSlrcILp6PO
 ```
 
-Put the result where the password used to be:
+Without `htpasswd` installed, borrow it from an image:
+
+```bash
+docker run --rm httpd:alpine htpasswd -nbB admin your-password
+```
+
+Paste the whole line into the variable, doubling every `$`:
 
 ```yaml
     environment:
-      USERS: admin:scrypt:32768:8:1$$EenbwQ2I$$3ae74334d821...
+      USERS: admin:$$2y$$05$$9F7kBCq2MTqsnSehrbZeKu3E1mJzt38dffCKJJsHZFVSlrcILp6PO
 ```
 
-**Double every `$` in a compose file**, as shown above: compose reads a single one as the start
-of a variable and would silently mangle the hash. On a `docker run` command line single quotes
-around the value are enough.
+**Doubling matters.** Compose reads a single `$` as the start of a variable name, eats part of
+the hash and only prints a warning, after which the password silently stops working. On a
+`docker run` command line single quotes around the value are enough.
 
-Hashes and plain passwords may be mixed in the same variable — anything starting with `scrypt:`
-or `pbkdf2:` is treated as a hash. Verification costs about 70 ms per request by design, which
-is what makes a stolen hash expensive to attack; for a gateway sending a handful of messages
-that is not a load worth worrying about.
+Hashed and plain entries may be mixed in the same variable. Besides bcrypt the gateway also
+accepts what `werkzeug.security` produces, in case a hash has to be made without `htpasswd`.
+Verification takes a few tens of milliseconds by design — that is what makes a stolen hash
+expensive to attack, and for a gateway sending a handful of messages it is not a load worth
+worrying about.
 
 Note that this protects the password where it is stored, not where it travels: HTTP Basic auth
 still sends the password itself with every request, so use `SSL` or a trusted network.

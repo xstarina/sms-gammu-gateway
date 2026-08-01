@@ -8,6 +8,7 @@ import logging
 from functools import wraps
 from typing import Any, Callable
 
+import bcrypt
 import gammu
 from flask import Flask, current_app, request
 from flask_httpauth import HTTPBasicAuth
@@ -20,9 +21,12 @@ from sms_gateway.modem import Modem
 logger = logging.getLogger(__name__)
 auth = HTTPBasicAuth()
 
-# Werkzeug puts the algorithm in front of the hash, which is what distinguishes a
-# hashed password from one written in the clear
-HASH_PREFIXES = ('scrypt:', 'pbkdf2:')
+# What htpasswd -B writes. The 2a, 2b and 2y variants differ only in history.
+BCRYPT_PREFIX = '$2'
+
+# What werkzeug.security writes, accepted so a hash can also be produced without
+# htpasswd at hand
+WERKZEUG_PREFIXES = ('scrypt:', 'pbkdf2:')
 
 # Reply for an empty inbox: same structure, empty fields
 EMPTY_SMS = {'Date': '', 'Number': '', 'State': '', 'Text': ''}
@@ -31,11 +35,21 @@ EMPTY_SMS = {'Date': '', 'Number': '', 'State': '', 'Text': ''}
 def password_matches(expected: str, given: str) -> bool:
     """Compare against a stored password, hashed or plain.
 
-    Both branches take the same time whatever the input, so neither a plain
-    password nor a hash can be guessed from how long the answer took.
+    Every branch compares in constant time, so neither a password nor a hash can
+    be guessed from how long the answer took.
     """
-    if expected.startswith(HASH_PREFIXES):
+    if expected.startswith(BCRYPT_PREFIX):
+        try:
+            return bcrypt.checkpw(given.encode(), expected.encode())
+        except ValueError:
+            # A hash mangled on its way through the environment, most often by a
+            # compose file where the dollar signs were not doubled
+            logger.error('Stored bcrypt hash is malformed, check for unescaped $ signs')
+            return False
+
+    if expected.startswith(WERKZEUG_PREFIXES):
         return check_password_hash(expected, given)
+
     return hmac.compare_digest(expected, given)
 
 
