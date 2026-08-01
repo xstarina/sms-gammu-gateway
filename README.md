@@ -47,8 +47,14 @@ If the device only shows up as a CD-ROM, you need
 
 ## Quick start
 
-There is no need to build the image — a ready one is published to the GitHub Container
-Registry for `linux/amd64` and `linux/arm64`.
+There is no need to build the image — a ready one is published for `linux/amd64` and
+`linux/arm64` to both the GitHub Container Registry and Docker Hub. The two are the same
+image, so pick whichever registry suits you:
+
+```
+ghcr.io/xstarina/sms-gammu-gateway:latest
+starina/sms-gammu-gateway:latest
+```
 
 ```bash
 # 1. Prepare the configuration

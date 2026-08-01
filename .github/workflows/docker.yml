@@ -8,9 +8,11 @@ on:
   workflow_dispatch:
 
 env:
-  # Published to the GitHub Container Registry: it authenticates with the built-in
-  # GITHUB_TOKEN, so no secrets have to be configured.
-  REGISTRY_IMAGE: ghcr.io/${{ github.repository }}
+  # The GitHub Container Registry authenticates with the built-in GITHUB_TOKEN.
+  GHCR_IMAGE: ghcr.io/${{ github.repository }}
+  # Docker Hub needs DOCKERHUB_USERNAME and DOCKERHUB_TOKEN repository secrets,
+  # where the token is a Docker Hub access token with read and write scope.
+  DOCKERHUB_IMAGE: docker.io/starina/sms-gammu-gateway
 
 jobs:
   # Tests run in the same image that ships to the registry and gate publishing.
@@ -65,7 +67,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY_IMAGE }}
+          images: |
+            ${{ env.GHCR_IMAGE }}
+            ${{ env.DOCKERHUB_IMAGE }}
 
       - uses: docker/setup-buildx-action@v4
 
@@ -75,6 +79,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v7
@@ -83,8 +92,9 @@ jobs:
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           # No tags at this step: every architecture is published as its own digest
-          # and the merge job assembles them into a single image.
-          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          # to both registries, and the merge job assembles them into one image.
+          # The name list is quoted so its comma is not read as a field separator.
+          outputs: type=image,"name=${{ env.GHCR_IMAGE }},${{ env.DOCKERHUB_IMAGE }}",push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
 
@@ -122,7 +132,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY_IMAGE }}
+          images: |
+            ${{ env.GHCR_IMAGE }}
+            ${{ env.DOCKERHUB_IMAGE }}
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
@@ -135,12 +147,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # metadata-action produced tags for both registries, so this single command
+      # publishes the manifest list to each of them. The digests are identical in
+      # both, so any one of them serves as the source.
       - name: Push the manifest
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+            $(printf '${{ env.GHCR_IMAGE }}@sha256:%s ' *)
 
-      - name: Inspect the published image
-        run: docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
+      - name: Inspect the published images
+        run: |
+          docker buildx imagetools inspect ${{ env.GHCR_IMAGE }}:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect ${{ env.DOCKERHUB_IMAGE }}:${{ steps.meta.outputs.version }}

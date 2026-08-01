@@ -47,8 +47,14 @@ ls -l /dev/ttyUSB*
 
 ## Быстрый старт
 
-Собирать образ не нужно — готовый публикуется в GitHub Container Registry под
-`linux/amd64` и `linux/arm64`.
+Собирать образ не нужно — готовый публикуется под `linux/amd64` и `linux/arm64` сразу
+в два реестра, GitHub Container Registry и Docker Hub. Это один и тот же образ, берите
+удобный:
+
+```
+ghcr.io/xstarina/sms-gammu-gateway:latest
+starina/sms-gammu-gateway:latest
+```
 
 ```bash
 # 1. Подготовить конфигурацию
