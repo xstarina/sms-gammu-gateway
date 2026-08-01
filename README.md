@@ -260,6 +260,14 @@ docker run -d -p 5000:5000 \
 
 Expected files: `/ssl/cert.pem` and `/ssl/key.pem`.
 
+If `/ssl` holds no certificate, the gateway does not refuse to start: it generates a
+self-signed one and serves HTTPS with that. Handy for a quick check or a trusted network, but
+keep in mind that the certificate is regenerated on every restart and no client will trust it,
+so `curl` needs `-k` and anything past a trusted network needs a real certificate. Generating
+it goes through a temporary file, so a container started with `read_only: true` also needs a
+writable `/tmp` — the hardened example above already mounts one. Without it the gateway stops
+at startup and says so.
+
 ## API
 
 Every endpoint requires HTTP Basic authentication against the pairs in

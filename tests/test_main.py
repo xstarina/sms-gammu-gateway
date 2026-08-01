@@ -9,6 +9,8 @@ import pytest
 
 from helpers import FakeModem
 from sms_gateway import __main__ as entry_point
+from sms_gateway.config import Settings
+from sms_gateway.errors import GatewayError
 
 
 @pytest.fixture
@@ -28,6 +30,51 @@ def test_sigterm_becomes_a_normal_exit(restore_sigterm):
 
     # A requested stop is not a failure, or restart policies would react to it
     assert stop.value.code == 0
+
+
+def test_plain_http_when_ssl_is_off():
+    assert entry_point.ssl_context(Settings(ssl=False)) is None
+
+
+def test_mounted_certificate_is_used(tmp_path, monkeypatch):
+    certificate = tmp_path / 'cert.pem'
+    key = tmp_path / 'key.pem'
+    certificate.write_text('cert')
+    key.write_text('key')
+    monkeypatch.setattr(entry_point, 'SSL_CERTIFICATE', (str(certificate), str(key)))
+
+    assert entry_point.ssl_context(Settings(ssl=True)) == (str(certificate), str(key))
+
+
+@pytest.mark.parametrize('present', ['neither', 'certificate only', 'key only'])
+def test_incomplete_certificate_falls_back_to_self_signed(tmp_path, monkeypatch, present):
+    """Half a pair is as unusable as none, and refusing to start helps nobody."""
+    certificate = tmp_path / 'cert.pem'
+    key = tmp_path / 'key.pem'
+    if present == 'certificate only':
+        certificate.write_text('cert')
+    if present == 'key only':
+        key.write_text('key')
+    monkeypatch.setattr(entry_point, 'SSL_CERTIFICATE', (str(certificate), str(key)))
+
+    assert entry_point.ssl_context(Settings(ssl=True)) == 'adhoc'
+
+
+def test_unwritable_temp_directory_is_reported_clearly(tmp_path, monkeypatch):
+    """A read-only container without tmpfs would otherwise fail deep inside the server."""
+    monkeypatch.setattr(
+        entry_point, 'SSL_CERTIFICATE', (str(tmp_path / 'cert.pem'), str(tmp_path / 'key.pem'))
+    )
+    monkeypatch.setattr(
+        entry_point.tempfile, 'TemporaryFile', lambda *a, **kw: (_ for _ in ()).throw(
+            OSError('No usable temporary directory found')
+        )
+    )
+
+    with pytest.raises(GatewayError) as failure:
+        entry_point.ssl_context(Settings(ssl=True))
+
+    assert 'writable /tmp' in str(failure.value)
 
 
 def test_modem_is_released_on_shutdown(restore_sigterm, monkeypatch):

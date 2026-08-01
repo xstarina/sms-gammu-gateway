@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import signal
+import tempfile
 from types import FrameType
 
 import gammu
@@ -26,6 +27,44 @@ def _shutdown(signum: int, _frame: FrameType | None) -> None:
     # Exit code zero: a requested stop is not a failure, and restart policies
     # such as on-failure would otherwise bring the container straight back
     raise SystemExit(0)
+
+
+def _require_writable_temp(directory: str) -> None:
+    """A generated certificate is handed to the server through a temporary file."""
+    try:
+        with tempfile.TemporaryFile():
+            pass
+    except OSError as error:
+        raise GatewayError(
+            f'SSL is on, {directory} holds no certificate, and a self-signed one cannot be '
+            f'generated without a writable temporary directory ({error}). Mount a certificate '
+            f'into {directory}, or give the container a writable /tmp.'
+        ) from error
+
+
+def ssl_context(settings: Settings) -> tuple[str, str] | str | None:
+    """Pick what to serve HTTPS with, or None for plain HTTP.
+
+    A missing certificate is not a reason to refuse to start: the server falls
+    back to one generated at startup. Nothing is written to the image, but the
+    certificate does pass through a temporary file on its way to the server.
+    """
+    if not settings.ssl:
+        return None
+
+    certificate, key = SSL_CERTIFICATE
+    if os.path.isfile(certificate) and os.path.isfile(key):
+        return SSL_CERTIFICATE
+
+    directory = os.path.dirname(certificate)
+    _require_writable_temp(directory)
+    logger.warning(
+        'No certificate in %s, generating a self-signed one. It changes on every '
+        'restart and no client will trust it: mount a real certificate for anything '
+        'beyond a trusted network.',
+        directory,
+    )
+    return 'adhoc'
 
 
 def _give_up() -> None:
@@ -58,6 +97,9 @@ def main() -> None:
     settings = Settings.from_env()
 
     try:
+        # Decided before the modem is opened: a misconfigured certificate should
+        # not cost a round trip to the device before it is reported
+        context = ssl_context(settings)
         users = load_users(settings.credentials_file)
         modem = Modem(pin=settings.pin, config_file=settings.gammu_config)
     except (OSError, GatewayError, gammu.GSMError) as error:
@@ -80,7 +122,7 @@ def main() -> None:
         app.run(
             host='0.0.0.0',
             port=settings.port,
-            ssl_context=SSL_CERTIFICATE if settings.ssl else None,
+            ssl_context=context,
         )
     finally:
         watchdog.stop()
