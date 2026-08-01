@@ -251,8 +251,38 @@ docker run -d -p 5000:5000 \
 
 ```bash
 curl -u admin:password -X POST http://localhost:5000/sms \
-  -d "number=+79001234567" \
-  -d "text=Тестовое сообщение"
+  -H "Content-Type: application/json" \
+  -d '{"number": "+79001234567", "text": "Test message"}'
+```
+
+Всему, что за пределами латиницы, нужен `unicode`. Без него текст кодируется семибитным
+алфавитом GSM, где кириллицы нет, и получателю придут вопросительные знаки:
+
+```bash
+curl -u admin:password -X POST http://localhost:5000/sms \
+  -H "Content-Type: application/json" \
+  -d '{"number": "+79001234567", "text": "Привет! Это тест.", "unicode": true}'
+```
+
+Переносы строк передаются как `\n` внутри строки JSON, несколько получателей перечисляются
+в `number` через запятую:
+
+```bash
+curl -u admin:password -X POST http://localhost:5000/sms \
+  -H "Content-Type: application/json" \
+  -d '{"number": "+79001234567,+79007654321", "text": "Первая строка\nВторая строка", "unicode": true}'
+```
+
+Form-encoded тело тоже работает, но с плюсом есть подвох: в
+`application/x-www-form-urlencoded` знак `+` означает пробел, поэтому `-d "number=+79001234567"`
+молча его теряет и до шлюза доезжает `79001234567`. Используйте `--data-urlencode`, он
+экранирует плюс сам:
+
+```bash
+curl -u admin:password -X POST http://localhost:5000/sms \
+  --data-urlencode "number=+79001234567" \
+  --data-urlencode "text=Привет! Это тест." \
+  -d "unicode=true"
 ```
 
 Параметры (form-encoded или JSON):

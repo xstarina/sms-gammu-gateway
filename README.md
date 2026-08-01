@@ -252,8 +252,38 @@ The error body is JSON of the form `{"message": "..."}`.
 
 ```bash
 curl -u admin:password -X POST http://localhost:5000/sms \
-  -d "number=+79001234567" \
-  -d "text=Test message"
+  -H "Content-Type: application/json" \
+  -d '{"number": "+79001234567", "text": "Test message"}'
+```
+
+Anything outside the Latin alphabet needs `unicode`. Without it the text is encoded with the
+GSM 7-bit alphabet, which has no Cyrillic letters, and the recipient gets question marks:
+
+```bash
+curl -u admin:password -X POST http://localhost:5000/sms \
+  -H "Content-Type: application/json" \
+  -d '{"number": "+79001234567", "text": "Привет! Это тест.", "unicode": true}'
+```
+
+Line breaks travel as `\n` inside the JSON string, and several recipients are listed in
+`number` separated by commas:
+
+```bash
+curl -u admin:password -X POST http://localhost:5000/sms \
+  -H "Content-Type: application/json" \
+  -d '{"number": "+79001234567,+79007654321", "text": "Первая строка\nВторая строка", "unicode": true}'
+```
+
+A form-encoded body works as well, but mind the plus sign: in
+`application/x-www-form-urlencoded` a `+` stands for a space, so `-d "number=+79001234567"`
+quietly drops it and the number arrives as `79001234567`. Use `--data-urlencode`, which
+escapes the plus for you:
+
+```bash
+curl -u admin:password -X POST http://localhost:5000/sms \
+  --data-urlencode "number=+79001234567" \
+  --data-urlencode "text=Привет! Это тест." \
+  -d "unicode=true"
 ```
 
 Parameters (form-encoded or JSON):
