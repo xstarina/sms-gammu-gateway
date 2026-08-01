@@ -2,7 +2,9 @@
 
 [![Docker](https://github.com/xstarina/sms-gammu-gateway/actions/workflows/docker.yml/badge.svg)](https://github.com/xstarina/sms-gammu-gateway/actions/workflows/docker.yml)
 
-**English** · [Русский](README.ru.md)
+**English** · [Русский](https://github.com/xstarina/sms-gammu-gateway/blob/main/README.ru.md)
+
+Source code and issues: **https://github.com/xstarina/sms-gammu-gateway**
 
 A simple REST API gateway for sending and receiving SMS through a GSM modem attached to the
 host. The modem is driven by [Gammu](https://wammu.eu/gammu/) and its Python bindings, so any
@@ -164,7 +166,7 @@ rest of the settings stay the same.
 ### config/credentials.txt
 
 Usernames and passwords for HTTP Basic auth, one `username:password` pair per line. A template
-sits next to it in [config/credentials.txt.example](config/credentials.txt.example):
+sits next to it in [config/credentials.txt.example](https://github.com/xstarina/sms-gammu-gateway/blob/main/config/credentials.txt.example):
 
 ```
 admin:password
@@ -295,7 +297,7 @@ The Gammu version is a build argument:
 docker build --build-arg GAMMU_VERSION=1.43.3 -t sms-gammu-gateway .
 ```
 
-Python dependency versions are pinned in [requirements.txt](requirements.txt). A build takes a
+Python dependency versions are pinned in [requirements.txt](https://github.com/xstarina/sms-gammu-gateway/blob/main/requirements.txt). A build takes a
 few minutes because Gammu is compiled from source — there is no prebuilt package for current
 Alpine.
 
@@ -320,9 +322,9 @@ docker build --target test -t sms-gammu-gateway-test .
 docker run --rm sms-gammu-gateway-test
 ```
 
-Covered are the HTTP layer ([tests/test_api.py](tests/test_api.py)) — authentication on every
+Covered are the HTTP layer ([tests/test_api.py](https://github.com/xstarina/sms-gammu-gateway/blob/main/tests/test_api.py)) — authentication on every
 route, status codes, parameter parsing — and configuration
-([tests/test_config.py](tests/test_config.py)): environment variables and credentials loading.
+([tests/test_config.py](https://github.com/xstarina/sms-gammu-gateway/blob/main/tests/test_config.py)): environment variables and credentials loading.
 The device conversation inside `sms_gateway.modem` is not covered: it can only be verified for
 real, against a connected modem.
 
@@ -339,12 +341,12 @@ real, against a connected modem.
 
 ## Contributing
 
-Patches are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for how to run the tests and what
+Patches are welcome — see [CONTRIBUTING.md](https://github.com/xstarina/sms-gammu-gateway/blob/main/CONTRIBUTING.md) for how to run the tests and what
 is expected of a change. One rule worth repeating here: `README.md` and `README.ru.md` are
 updated together, in the same commit.
 
 ## License
 
-Apache License 2.0, see [LICENSE](LICENSE).
+Apache License 2.0, see [LICENSE](https://github.com/xstarina/sms-gammu-gateway/blob/main/LICENSE).
 
 This project is based on [pajikos/sms-gammu-gateway](https://github.com/pajikos/sms-gammu-gateway).

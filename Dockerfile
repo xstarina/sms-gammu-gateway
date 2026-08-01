@@ -83,8 +83,12 @@ CMD [".venv/bin/pytest"]
 # ------------------------------------------------------------------------------
 FROM base AS final
 
+# The source label is what links a published package back to its repository, both on
+# GHCR and in tooling that inspects images.
 LABEL org.opencontainers.image.title="SMS Gammu Gateway" \
       org.opencontainers.image.description="REST API for sending and receiving SMS through a GSM modem" \
+      org.opencontainers.image.source="https://github.com/xstarina/sms-gammu-gateway" \
+      org.opencontainers.image.url="https://github.com/xstarina/sms-gammu-gateway" \
       org.opencontainers.image.licenses="Apache-2.0"
 
 # The dialout group (GID 20) grants access to the forwarded modem: on most hosts

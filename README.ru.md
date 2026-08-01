@@ -2,7 +2,9 @@
 
 [![Docker](https://github.com/xstarina/sms-gammu-gateway/actions/workflows/docker.yml/badge.svg)](https://github.com/xstarina/sms-gammu-gateway/actions/workflows/docker.yml)
 
-[English](README.md) · **Русский**
+[English](https://github.com/xstarina/sms-gammu-gateway/blob/main/README.md) · **Русский**
+
+Исходный код и обсуждения: **https://github.com/xstarina/sms-gammu-gateway**
 
 Простой REST API-шлюз для отправки и приёма SMS через GSM-модем, подключённый к хосту.
 Работа с модемом идёт через [Gammu](https://wammu.eu/gammu/) и его Python-биндинги, так что
@@ -164,7 +166,7 @@ services:
 ### config/credentials.txt
 
 Логины и пароли для HTTP Basic Auth, по одной паре на строку в формате `логин:пароль`.
-Шаблон лежит рядом в [config/credentials.txt.example](config/credentials.txt.example):
+Шаблон лежит рядом в [config/credentials.txt.example](https://github.com/xstarina/sms-gammu-gateway/blob/main/config/credentials.txt.example):
 
 ```
 admin:password
@@ -295,7 +297,7 @@ docker build -t sms-gammu-gateway .
 docker build --build-arg GAMMU_VERSION=1.43.3 -t sms-gammu-gateway .
 ```
 
-Версии Python-зависимостей закреплены в [requirements.txt](requirements.txt). Сборка занимает
+Версии Python-зависимостей закреплены в [requirements.txt](https://github.com/xstarina/sms-gammu-gateway/blob/main/requirements.txt). Сборка занимает
 несколько минут — Gammu компилируется из исходников, готового пакета для актуального Alpine нет.
 
 ### Диагностика
@@ -319,8 +321,8 @@ docker build --target test -t sms-gammu-gateway-test .
 docker run --rm sms-gammu-gateway-test
 ```
 
-Покрыты HTTP-слой ([tests/test_api.py](tests/test_api.py)) — аутентификация всех маршрутов,
-коды ответов, разбор параметров — и конфигурация ([tests/test_config.py](tests/test_config.py)):
+Покрыты HTTP-слой ([tests/test_api.py](https://github.com/xstarina/sms-gammu-gateway/blob/main/tests/test_api.py)) — аутентификация всех маршрутов,
+коды ответов, разбор параметров — и конфигурация ([tests/test_config.py](https://github.com/xstarina/sms-gammu-gateway/blob/main/tests/test_config.py)):
 переменные окружения и чтение учётных данных. Обмен с устройством внутри `sms_gateway.modem`
 тестами не покрыт: он проверяется только вживую, на подключённом модеме.
 
@@ -337,12 +339,12 @@ docker run --rm sms-gammu-gateway-test
 
 ## Как участвовать
 
-Правки приветствуются — в [CONTRIBUTING.md](CONTRIBUTING.md) описано, как запускать тесты и
+Правки приветствуются — в [CONTRIBUTING.md](https://github.com/xstarina/sms-gammu-gateway/blob/main/CONTRIBUTING.md) описано, как запускать тесты и
 что ожидается от изменения. Одно правило стоит повторить здесь: `README.md` и `README.ru.md`
 обновляются вместе, одним коммитом.
 
 ## Лицензия
 
-Apache License 2.0, см. [LICENSE](LICENSE).
+Apache License 2.0, см. [LICENSE](https://github.com/xstarina/sms-gammu-gateway/blob/main/LICENSE).
 
 Проект основан на [pajikos/sms-gammu-gateway](https://github.com/pajikos/sms-gammu-gateway).
