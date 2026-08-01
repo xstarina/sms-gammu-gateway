@@ -10,9 +10,13 @@ on:
 env:
   # The GitHub Container Registry authenticates with the built-in GITHUB_TOKEN.
   GHCR_IMAGE: ghcr.io/${{ github.repository }}
-  # Docker Hub needs DOCKERHUB_USERNAME and DOCKERHUB_TOKEN repository secrets,
-  # where the token is a Docker Hub access token with read and write scope.
+  # Docker Hub needs DOCKERHUB_USERNAME and DOCKERHUB_TOKEN repository secrets. The
+  # token needs read/write/delete scope: plain read/write is enough to push images
+  # but not to update the repository description.
+  # Spelled out twice because the registry prefix belongs to the image reference,
+  # while the description API wants the bare namespace/name.
   DOCKERHUB_IMAGE: docker.io/starina/sms-gammu-gateway
+  DOCKERHUB_REPO: starina/sms-gammu-gateway
 
 jobs:
   # Tests run in the same image that ships to the registry and gate publishing.
@@ -166,3 +170,22 @@ jobs:
         run: |
           docker buildx imagetools inspect ${{ env.GHCR_IMAGE }}:${{ steps.meta.outputs.version }}
           docker buildx imagetools inspect ${{ env.DOCKERHUB_IMAGE }}:${{ steps.meta.outputs.version }}
+
+  # Pushing an image does not fill the overview page on Docker Hub, so the English
+  # README is uploaded separately. Only from main: a tag build would send the very
+  # same text again.
+  description:
+    name: Docker Hub description
+    needs: merge
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: peter-evans/dockerhub-description@v5
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.DOCKERHUB_REPO }}
+          readme-filepath: ./README.md
+          short-description: ${{ github.event.repository.description }}
