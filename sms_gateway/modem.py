@@ -41,6 +41,15 @@ class Modem:
         self._machine.EnterSecurityCode('PIN', pin)
         logger.info('PIN accepted')
 
+    def close(self) -> None:
+        """Release the serial port. Safe to call more than once."""
+        with self._lock:
+            try:
+                self._machine.Terminate()
+            except gammu.GSMError as error:
+                # Shutdown must not fail because a dead modem refuses to say goodbye
+                logger.warning('Modem did not close cleanly: %s', error)
+
     def signal_quality(self) -> dict[str, Any]:
         with self._lock:
             return self._machine.GetSignalQuality()

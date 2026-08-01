@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import signal
+from types import FrameType
 
 import gammu
 
@@ -15,6 +17,24 @@ logger = logging.getLogger(__name__)
 
 # Paths where the application expects the key and the certificate when SSL is on
 SSL_CERTIFICATE = ('/ssl/cert.pem', '/ssl/key.pem')
+
+
+def _shutdown(signum: int, _frame: FrameType | None) -> None:
+    logger.info('Received %s', signal.Signals(signum).name)
+    # Exit code zero: a requested stop is not a failure, and restart policies
+    # such as on-failure would otherwise bring the container straight back
+    raise SystemExit(0)
+
+
+def install_signal_handlers() -> None:
+    """Turn SIGTERM into a normal exit.
+
+    The application is PID 1 in the container, and the kernel does not apply
+    default signal dispositions to PID 1. Without an explicit handler SIGTERM is
+    ignored, `docker stop` waits out its timeout and kills the process, which is
+    why a restart used to take ten seconds and end with exit code 137.
+    """
+    signal.signal(signal.SIGTERM, _shutdown)
 
 
 def main() -> None:
@@ -33,12 +53,19 @@ def main() -> None:
         raise SystemExit(1) from error
 
     app = create_app(modem, users)
-    # Listen on every interface: only the published port is reachable from outside
-    app.run(
-        host='0.0.0.0',
-        port=settings.port,
-        ssl_context=SSL_CERTIFICATE if settings.ssl else None,
-    )
+    install_signal_handlers()
+
+    try:
+        # Listen on every interface: only the published port is reachable from outside
+        app.run(
+            host='0.0.0.0',
+            port=settings.port,
+            ssl_context=SSL_CERTIFICATE if settings.ssl else None,
+        )
+    finally:
+        # Hand the serial port back, so the next start does not find it busy
+        logger.info('Shutting down')
+        modem.close()
 
 
 if __name__ == '__main__':

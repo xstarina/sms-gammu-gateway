@@ -38,6 +38,10 @@ class FakeModem:
         self.messages = list(messages or [])
         self.sent: list[dict[str, Any]] = []
         self.fail = fail
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
 
     def _check(self) -> None:
         if self.fail:
