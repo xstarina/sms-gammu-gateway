@@ -55,16 +55,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # arch carries the same value as platform without the slash, which is not
+          # allowed in artifact names.
           - platform: linux/amd64
+            arch: amd64
             runner: ubuntu-latest
           - platform: linux/arm64
+            arch: arm64
             runner: ubuntu-24.04-arm
     steps:
-      - name: Platform name for the artifact
-        run: echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
-        env:
-          platform: ${{ matrix.platform }}
-
       - uses: actions/checkout@v7
 
       - name: Image labels
@@ -110,7 +109,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: digests-${{ env.PLATFORM_PAIR }}
+          name: digests-${{ matrix.arch }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
           retention-days: 1
