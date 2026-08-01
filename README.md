@@ -184,9 +184,17 @@ Pairs for HTTP Basic auth come from `USERS`, and there is no credentials file to
       USERS: admin:your-password,monitoring:another-password
 ```
 
-Pairs are separated by commas, spaces or newlines, so a compose block scalar with one pair per
-line reads just as well. A password may contain colons — only the first one separates — but not
-commas or spaces, since those end the pair.
+Pairs are separated by commas, spaces or newlines, so several of them read better one per line:
+
+```yaml
+    environment:
+      USERS: |
+        admin:your-password
+        monitoring:another-password
+```
+
+A quoted multi-line value in an `env_file` works the same way. A password may contain colons —
+only the first one separates — but not commas or spaces, since those end the pair.
 
 The gateway refuses to start when `USERS` is unset or holds anything that is not a usable pair,
 and says which entry it choked on. Credentials are the one thing it cannot guess, so guessing
