@@ -99,7 +99,6 @@ class Settings:
 
     port: int = 5000
     pin: str | None = None
-    ssl: bool = False
     gammu_config: str = DEFAULT_GAMMU_CONFIG
     users: dict[str, str] = field(default_factory=dict)
     allowed_networks: tuple[Network, ...] = ()
@@ -111,7 +110,6 @@ class Settings:
         return cls(
             port=int(os.getenv('PORT', '5000')),
             pin=os.getenv('PIN') or None,
-            ssl=as_bool(os.getenv('SSL')),
             gammu_config=os.getenv('GAMMU_CONFIG', DEFAULT_GAMMU_CONFIG),
             users=parse_users(os.getenv('USERS', '')),
             allowed_networks=parse_networks(os.getenv('ALLOWED_NETWORKS', '')),

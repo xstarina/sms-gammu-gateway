@@ -237,7 +237,8 @@ expensive to attack, and for a gateway sending a handful of messages it is not a
 worrying about.
 
 Note that this protects the password where it is stored, not where it travels: HTTP Basic auth
-still sends the password itself with every request, so use `SSL` or a trusted network.
+still sends the password itself with every request, so put TLS on a proxy in front, or keep
+the gateway on a trusted network.
 
 ### The modem configuration
 
@@ -269,11 +270,21 @@ of the mapping — write your own file and mount it over this one, or point `GAM
 | `ALLOWED_NETWORKS` | unset | Addresses and subnets allowed to reach the API. Unset means no restriction |
 | `PIN` | unset | SIM card PIN. Required only if the card asks for one; without it the gateway will not start |
 | `PORT` | `5000` | HTTP server port |
-| `SSL` | off | Enables HTTPS. `1`, `true`, `yes` and `on` are truthy (case-insensitive), anything else turns it off |
 | `GAMMU_CONFIG` | `config/gammu.config` | Path to the Gammu configuration file |
 | `TZ` | `UTC` | Container timezone, for example `Europe/Moscow`. Controls timestamps in the logs |
 | `WATCHDOG_INTERVAL` | `60` | Seconds between modem probes. `0` turns the watchdog off |
 | `WATCHDOG_FAILURES` | `3` | Failed probes in a row before the session is rebuilt |
+
+### There is no HTTPS
+
+The gateway speaks plain HTTP. Terminate TLS on a reverse proxy in front of it — nginx, Caddy,
+Traefik — and keep the container on an internal network.
+
+Built-in HTTPS existed until v2.0.0 and was removed rather than left as a trap. Flask's
+development server wraps the *listening* socket, so the TLS handshake runs inside the accept
+loop: one client that opens a connection and stalls blocks every other client, and browsers
+open connections speculatively all the time. A proxy also brings a certificate clients actually
+trust.
 
 ### Restricting access by address
 
@@ -314,30 +325,6 @@ rest to the restart policy, so make sure the container has one:
 Loss of network registration is deliberately **not** treated as a fault. No amount of
 restarting brings a cell tower back, and reacting to it would turn weak signal into a restart
 loop. Watch `/signal` and `/network` for that instead.
-
-### HTTPS
-
-With `SSL` enabled the application reads the key and the certificate from fixed paths, so
-mount them into the prepared `/ssl` directory:
-
-```bash
-docker run -d -p 5000:5000 \
-  --device=/dev/ttyUSB0:/dev/mobile \
-  -v "$PWD/config:/sms-gw/config:ro" \
-  -v "$PWD/ssl:/ssl:ro" \
-  -e SSL=True \
-  ghcr.io/xstarina/sms-gammu-gateway:latest
-```
-
-Expected files: `/ssl/cert.pem` and `/ssl/key.pem`.
-
-If `/ssl` holds no certificate, the gateway does not refuse to start: it generates a
-self-signed one and serves HTTPS with that. Handy for a quick check or a trusted network, but
-keep in mind that the certificate is regenerated on every restart and no client will trust it,
-so `curl` needs `-k` and anything past a trusted network needs a real certificate. Generating
-it goes through a temporary file, so a container started with `read_only: true` also needs a
-writable `/tmp` — the hardened example above already mounts one. Without it the gateway stops
-at startup and says so.
 
 ## API
 
@@ -483,8 +470,8 @@ real, against a connected modem.
 - **The built-in Flask server is used** (`app.run`), which is not meant for production load.
   For permanent deployments put nginx in front of it or run it through a WSGI server.
 - **Basic auth sends the password with every request**, so the connection is what protects it:
-  use `SSL`, or keep the gateway on a trusted network. Storing a hash in `USERS` protects where
-  the password rests, not how it travels.
+  terminate TLS on a reverse proxy, or keep the gateway on a trusted network. Storing a hash in
+  `USERS` protects where the password rests, not how it travels.
 - **Modem requests are serialised.** Gammu keeps a single connection to the device, so calls
   are serialised by a lock: concurrent requests do not corrupt each other, but they do wait for
   the previous one to finish.

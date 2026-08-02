@@ -98,9 +98,7 @@ LABEL org.opencontainers.image.title="SMS Gammu Gateway" \
 # it numerically, and a shifted UID would silently point somewhere else.
 RUN set -ex; \
     adduser -g 'Gammu User' -SDH -u 100 gammu; \
-    addgroup gammu dialout; \
-    mkdir -p /ssl; \
-    chown gammu /ssl
+    addgroup gammu dialout
 
 # Only libGammu and libgsmsd are needed from the builder, _gammu.so links against
 # both, plus the gammu CLI for diagnostics. Headers and pkg-config files stay behind.
@@ -126,7 +124,7 @@ ENV PATH="/sms-gw/.venv/bin:${PATH}" \
 USER 100
 EXPOSE 5000/tcp
 
-# TCP liveness probe: independent of both authentication and SSL.
+# TCP liveness probe: does not depend on authentication.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["python", "-c", "import os, socket; socket.create_connection(('127.0.0.1', int(os.environ['PORT'])), 3).close()"]
 

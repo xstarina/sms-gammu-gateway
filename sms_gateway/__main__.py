@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import os
 import signal
-import tempfile
 from types import FrameType
 
 import gammu
@@ -18,9 +17,6 @@ from sms_gateway.watchdog import Watchdog
 
 logger = logging.getLogger(__name__)
 
-# Paths where the application expects the key and the certificate when SSL is on
-SSL_CERTIFICATE = ('/ssl/cert.pem', '/ssl/key.pem')
-
 
 def _shutdown(signum: int, _frame: FrameType | None) -> None:
     logger.info('Received %s', signal.Signals(signum).name)
@@ -29,42 +25,17 @@ def _shutdown(signum: int, _frame: FrameType | None) -> None:
     raise SystemExit(0)
 
 
-def _require_writable_temp(directory: str) -> None:
-    """A generated certificate is handed to the server through a temporary file."""
-    try:
-        with tempfile.TemporaryFile():
-            pass
-    except OSError as error:
-        raise GatewayError(
-            f'SSL is on, {directory} holds no certificate, and a self-signed one cannot be '
-            f'generated without a writable temporary directory ({error}). Mount a certificate '
-            f'into {directory}, or give the container a writable /tmp.'
-        ) from error
+def warn_about_removed_settings() -> None:
+    """Say out loud that SSL is gone.
 
-
-def ssl_context(settings: Settings) -> tuple[str, str] | str | None:
-    """Pick what to serve HTTPS with, or None for plain HTTP.
-
-    A missing certificate is not a reason to refuse to start: the server falls
-    back to one generated at startup. Nothing is written to the image, but the
-    certificate does pass through a temporary file on its way to the server.
+    Ignoring the variable in silence would leave whoever set it believing their
+    traffic is encrypted when it is not.
     """
-    if not settings.ssl:
-        return None
-
-    certificate, key = SSL_CERTIFICATE
-    if os.path.isfile(certificate) and os.path.isfile(key):
-        return SSL_CERTIFICATE
-
-    directory = os.path.dirname(certificate)
-    _require_writable_temp(directory)
-    logger.warning(
-        'No certificate in %s, generating a self-signed one. It changes on every '
-        'restart and no client will trust it: mount a real certificate for anything '
-        'beyond a trusted network.',
-        directory,
-    )
-    return 'adhoc'
+    if os.getenv('SSL'):
+        logger.warning(
+            'SSL is set but no longer supported, the gateway serves plain HTTP. '
+            'Terminate TLS on a reverse proxy in front of it and drop the variable.'
+        )
 
 
 def _give_up() -> None:
@@ -93,12 +64,12 @@ def main() -> None:
         level=logging.INFO,
         format='%(asctime)s %(levelname)s %(name)s: %(message)s',
     )
+    warn_about_removed_settings()
 
     try:
         # Everything that can be judged without touching the device is judged
         # first: a typo in the environment should not cost a round trip to a modem
         settings = Settings.from_env()
-        context = ssl_context(settings)
         modem = Modem(pin=settings.pin, config_file=settings.gammu_config)
     except (OSError, ValueError, GatewayError, gammu.GSMError) as error:
         logger.error('Failed to start the gateway: %s', error)
@@ -116,12 +87,9 @@ def main() -> None:
     watchdog.start()
 
     try:
-        # Listen on every interface: only the published port is reachable from outside
-        app.run(
-            host='0.0.0.0',
-            port=settings.port,
-            ssl_context=context,
-        )
+        # Plain HTTP on every interface: only the published port is reachable from
+        # outside, and TLS belongs to a reverse proxy in front. See the README.
+        app.run(host='0.0.0.0', port=settings.port)
     finally:
         watchdog.stop()
         # Hand the serial port back, so the next start does not find it busy

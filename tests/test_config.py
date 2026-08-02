@@ -18,7 +18,6 @@ from sms_gateway.errors import GatewayError
 ENV_VARS = (
     'PORT',
     'PIN',
-    'SSL',
     'GAMMU_CONFIG',
     'USERS',
     'ALLOWED_NETWORKS',
@@ -60,7 +59,6 @@ def test_settings_defaults(clean_env, monkeypatch):
 
     assert settings.port == 5000
     assert settings.pin is None
-    assert settings.ssl is False
     assert settings.gammu_config == DEFAULT_GAMMU_CONFIG
     assert settings.allowed_networks == ()
 
@@ -68,7 +66,6 @@ def test_settings_defaults(clean_env, monkeypatch):
 def test_settings_read_from_env(clean_env, monkeypatch):
     monkeypatch.setenv('PORT', '8080')
     monkeypatch.setenv('PIN', '1234')
-    monkeypatch.setenv('SSL', 'yes')
     monkeypatch.setenv('GAMMU_CONFIG', '/etc/gammu.conf')
     monkeypatch.setenv('USERS', 'admin:secret')
     monkeypatch.setenv('ALLOWED_NETWORKS', '10.0.0.0/8')
@@ -77,7 +74,6 @@ def test_settings_read_from_env(clean_env, monkeypatch):
 
     assert settings.port == 8080
     assert settings.pin == '1234'
-    assert settings.ssl is True
     assert settings.gammu_config == '/etc/gammu.conf'
     assert settings.users == {'admin': 'secret'}
     assert settings.allowed_networks == (ipaddress.ip_network('10.0.0.0/8'),)
